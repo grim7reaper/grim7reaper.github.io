@@ -1,0 +1,231 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Outils de débogage pour la programmation concurrente — Valgrind — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2013/09/19/outils-de-debogage-pour-la-programmation-concurrente-valgrind/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Outils de débogage pour la programmation concurrente — Valgrind</h1>
+
+  <p>
+  Valgrind est un logiciel sous licence GPLv2. Il a été développé à la base
+  comme un outil pour déboguer les erreurs de gestion de la mémoire sous
+  GNU/Linux. Par la suite, il a évolué pour devenir un véritable framework pour
+  le développement d’outils d’analyse dynamique. Aujourd’hui, toute une suite
+  d’outils est disponible et elle permet de :
+</p>
+
+<ul>
+  <li>
+    détecter les problèmes dans la gestion de la mémoire (Memcheck) ;
+  </li>
+  <li>
+    faire du profilage (Callgrind, Cachegrind, Massif) ;
+  </li>
+  <li>
+    détecter les erreurs dans les programmes multithread (Helgrind, DRD), ce
+    sont ces outils qui vont nous intéresser dans le cadre de cette série
+    d’articles.
+  </li>
+</ul>
+
+<h2>Approche</h2>
+
+<p>
+  Valgrind fonctionne en instrumentant le code. Cela signifie qu’il ajoute
+  dynamiquement du code à exécuter en plus du code du programme en cours
+  d’analyse afin de pouvoir le surveiller. Il y a deux façons d’instrumenter le
+  code<sup id="fnref:1"><a href="#fn:1">1</a></sup> :
+</p>
+
+<ul>
+  <li>
+    <em>Copy and Annotate</em> : le code du programme est copié quasiment à
+    l’identique (seules quelques instructions pour changer le flot d’exécution
+    du programme sont insérées). Chaque instruction est annotée avec une
+    description de ses effets, ces annotations sont ensuite utilisées par le
+    logiciel d’analyse pour réaliser l’instrumentation.
+  </li>
+  <li>
+    <em>Disassemble and Resynthesize</em> : au lieu d’exécuter directement le
+    code du programme, on le convertit en une représentation intermédiaire. Ce
+    code intermédiaire est ensuite instrumenté (en ajoutant des instructions,
+    elles aussi sous forme intermédiaire) puis l’ensemble est reconverti en code
+    machine pour être exécuté par le processeur.
+  </li>
+</ul>
+
+
+<p>
+  La seconde méthode est celle utilisée par Valgrind. Un de ses avantages est
+  que le compilateur à la volée utilisé pour transformer le code intermédiaire
+  en code machine peut donc également optimiser le code d’instrumentation.
+</p>
+
+<h2>Architecture</h2>
+
+<p>Valgrind est composé de trois grandes parties :</p>
+
+<ul>
+  <li>
+    le cœur (Coregrind) qui contient tout un ensemble de services : un
+    ordonnanceur de threads, l’implémentation d’un sous-ensemble de
+    la <em>libc</em>, un allocateur de mémoire, un gestionnaire de signaux, … La
+    plupart de ces services sont dépendants du système sous-jacent.
+  </li>
+  <li>
+    la <em>libVEX</em> qui est responsable de la traduction du code machine en
+    représentation intermédiaire et réciproquement. Cette partie dépend bien sûr
+    aussi de l’architecture.
+  </li>
+  <li>
+    les outils (Memcheck, DRD, …) qui réalisent l’instrumentation du code et qui
+    analysent l’exécution du programme. Étant donné que ces outils se basent sur
+    Coregrind et la <em>libVEX</em> ils sont normalement indépendant de
+    l’architecture.
+  </li>
+</ul>
+
+<h2>Instrumentation</h2>
+
+<p>
+  La représentation intermédiaire utilisé par Valgrind est appelé VEX. C’est une
+  représentation qui possède un typage, ne dépend pas de l’architecture utilisée
+  (les instructions spécifiques à une architecture sont implémentées en tant que
+  fonctions C) et qui est de la forme
+  <a href="https://en.wikipedia.org/wiki/Static_single_assignment_form">SSA</a>
+  (représentation où chaque variable est assignée une seule fois) qui est une
+  représentation très utilisée dans les compilateurs car elle permet de
+  transformer et optimiser le code (élimination de code mort par exemple) plus
+  simplement.
+</p>
+
+<p>Le processus d’instrumentation est composé de huit étapes :</p>
+
+<p>
+  <img src="/static/images/valgrind/valgrind.png" class="centered" title="Architecture et fonctionnement global de Valgrind" alt="Architecture et fonctionnement global de Valgrind" style="background-color: #f8f8f8;">
+</p>
+
+<ol>
+  <li>désassemblage (le code machine du programme est converti en VEX) ;</li>
+  <li>optimisation du code VEX ;</li>
+  <li>instrumentation du code VEX par l’outil ;</li>
+  <li>optimisation du code instrumenté ;</li>
+  <li>
+    construction de l’arbre à partir du code instrumenté (préparation pour
+    l’étape suivante) ;
+  </li>
+  <li>conversion de l’arbre en liste d’instructions ;</li>
+  <li>allocation des registres ;</li>
+  <li>assemblage (la liste d’instructions est convertie en code machine).</li>
+</ol>
+
+
+<p>
+  Enfin, le code instrumenté est exécuté par le processeur. Selon les
+  instrumentations réalisées, le code pourra émettre des évènements (accès
+  mémoire à l’adresse <strong>X</strong>, allocation/libération de mémoire,
+  appels système, …) à l’intention de l’outil.
+</p>
+
+<h2>Dans le prochain épisode…</h2>
+
+<p>
+  Maintenant que l’on sait comment s’architecture Valgrind, on va pouvoir se
+  pencher plus en détails sur le fonctionnement des outils qui nous intéresse
+  dans le cadre de la programmation concurrente : Helgrind et DRD.
+</p>
+
+<div class="footnotes">
+  <hr class="weak-hr" />
+  <ol>
+    <li id="fn:1">
+      <p>
+        Nethercote, N., and Seward, J. Valgrind: a framework for heavyweight
+        dynamic binary instrumentation. In Proceedings of the 2007 ACM SIGPLAN
+        conference on Programming language design and implementation (New
+        York,NY, USA, 2007), PLDI ’07, ACM, pp. 89–100.<a href="#fnref:1">↩</a>
+      </p>
+    </li>
+  </ol>
+</div>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2013-09-19T00:00:00Z"
+            itemprop="datePublished">
+        2013-09-19
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#debugging" rel="tag">Debugging</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

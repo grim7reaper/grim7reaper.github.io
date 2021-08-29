@@ -1,0 +1,706 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Migration du blog sur Nanoc — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2019/11/17/migration-du-blog-sur-nanoc/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Migration du blog sur Nanoc</h1>
+
+  <p>
+  Comme vous l’avez très certainement remarqué, le blog a changé d’apparence :
+  c’est dû à la migration du blog sur Nanoc.
+</p>
+
+
+
+<h2>Pourquoi cette migration ?</h2>
+
+<p>Plusieurs raisons m’ont donné envie de quitter Octopress :</p>
+<ul>
+  <li>
+    la façon dont fonctionne Octopress 2 est « perfectible™ » : pour utiliser
+    Octopress il faut cloner le dépôt Git, puis créer son blog dans ce dépôt (ce
+    qui peut générer des conflits lorsque l’on souhaite mettre à jour Octopress
+    avec un <code>git pull</code>). C’est d’ailleurs l’un des défauts qui a
+    amené l’auteur à créer
+    <a href="https://octopress.org/2015/01/15/octopress-3.0-is-coming/">Octopress 3</a>.
+  </li>
+  <li>
+    Octopress lui-même semble plus ou moins mort : Octopress 2 n’est plus
+    développé et le développement d’Octopress 3 semble à l’arrêt. Je n’ai pas
+    vraiment envie de construire mon blog sur un <em>framework</em>
+    potentiellement non-maintenu.
+  </li>
+  <li>
+    Octopress est livré avec beaucoup de fonctionnalités par défaut, c’est
+    très pratique pour débuter et ça m’a bien aidé au début. Mais maintenant
+    que je veux avoir un contrôle plus fin et plus de compréhension sur la
+    tambouille interne ce côté « magique » deviens un désavantage.
+  </li>
+</ul>
+
+<p>
+  Quand j’ai décidé de migrer, en août 2017 (oui, il y a eu un <em>looooong</em>
+  délai entre l’envie et la réalisation concrète), j’ai demandé à
+  <a href="https://kaworu.ch/about/">kAworu</a> ce qu’il utilisait et la réponse
+  fut <a href="https://nanoc.app/">Nanoc</a>. Après avoir fait quelques
+  recherches dessus, j’ai décidé d’utiliser Nanoc moi aussi.
+  <br />
+  Voici quelques points qui ont fait pencher la balance en sa faveur :
+</p>
+
+<ul>
+  <li>c’est du Ruby, et le Ruby c’est fun, puissant et simple à utiliser.</li>
+  <li>pas de magie par défaut, il faut vraiment faire les choses soit-même.</li>
+  <li><a href="https://nanoc.app/about/">la documentation</a> est bonne.</li>
+  <li>et surtout c’est testé et approuvé par kAworu ! :p</li>
+</ul>
+
+
+
+<h2>Changements visibles</h2>
+
+<p>
+  Le changement le plus visible est bien évidemment le thème du blog : j’utilise
+  maintenant une CSS faite maison. Cependant, étant donné mes connaissances
+  limitées dans ce domaine, je suis parti sur un thème très simple. Malgré cela,
+  j’ai essayé de rendre le résultat <em>responsive</em> (du moins en partie…).
+  <br />
+  Notez également que, pour épargner vos yeux (mon mauvais goût en matière
+  d’associations de couleurs étant légendaire), je me suis limité aux couleurs
+  de <a href="https://ethanschoonover.com/solarized/">Solarized</a>.
+</p>
+
+<p>
+  Au niveau de la structure, là aussi j’ai beaucoup simplifié :
+</p>
+
+<ul>
+  <li>
+    la page d’accueil liste maintenant tous les articles publiés (elle remplace
+    donc la page d’archives, qui a été supprimée) : cela permet d’avoir une vue
+    d’ensemble du contenu du blog au premier coup d’œil.
+  </li>
+  <li>
+    pas de pagination (devenu inutile avec la nouvelle page d’accueil).
+  </li>
+  <li>
+    utilisation d’une unique page pour lister les articles classés par
+    catégories. Je reviendrais peut-être à une page par catégorie (comme c’était
+    le cas avant) quand j’aurai plus d’articles.
+  </li>
+  <li>
+    chaque article possède maintenant une courte description qui est affiché sur
+    la page d’accueil et la page des catégories.
+  </li>
+</ul>
+
+<p>En ce qui concerne les changements moins visibles :</p>
+
+<ul>
+  <li>
+    remplacement des liens <code>http</code> par <code>https</code> quand c’est
+    possible (de nos jours, la plupart des sites sont accessible en HTTPS, ce
+    qui n’était pas forcément le cas lors de la rédaction de certains articles).
+  </li>
+  <li>
+    réparation des liens cassés, en utilisant
+    <a href="https://web.archive.org/">archive.org</a> si nécessaire.
+  </li>
+  <li>
+    nouvelle favicon (faite maison, avec mes maigres capacités artistiques).
+  </li>
+  <li>
+    suppression de tout le JavaScript (il n’y en avait pas beaucoup à la base,
+    mais maintenant il n’y en a plus du tout : 100% <em>JS free</em>).
+  </li>
+</ul>
+
+
+
+<h2>Sous le capot</h2>
+
+<h3>Le langage source</h3>
+
+<p>
+  Le premier changement interne est le passage de Markdown à
+  <a href="https://en.wikipedia.org/wiki/ERuby">eRuby</a> pour la rédaction des
+  articles.
+</p>
+
+<p>
+  Le principal problème de Markdown est que le format est limité et il faut
+  souvent utiliser des dialectes (comme le <em>GitHub Flavored Markdown</em>)
+  pour avoir plus de fonctionnalités. Par exemple, Octopress utilise
+  <a href="https://kramdown.gettalong.org/">kramdown</a> (qui est déjà un
+  Markdown enrichi) couplé avec
+  <a href="https://shopify.github.io/liquid/">Liquid</a>.
+</p>
+
+<p>
+  En utilisant eRuby, j’ai toutes les fonctionnalités nécessaires avec un seul
+  langage, sans avoir à recourir à des extensions ou dialectes. Et en bonus
+  j’ai un contrôle beaucoup plus fin sur le HTML généré (au contraire de
+  Markdown), ce qui est très pratique.
+</p>
+
+<h3>La coloration syntaxique</h3>
+
+<p>
+  Pour la coloration syntaxique des blocs de code, il n’y a rien de prévu par
+  défaut dans Nanoc (au contraire d’Octopress). Je suis donc allé faire un tour
+  sur le blog de kAworu pour voir ce qu’il utilisait :
+  <a href="http://rouge.jneen.net/">Rouge</a> via
+  <a href="https://github.com/kAworu/kaworu.ch/blob/4f64985deb187ef7abb0494c602a3c69806f1b8a/lib/filters/octohilight.rb">un filtre Nanoc fait maison</a>.
+</p>
+
+<p>
+  Je me suis donc très fortement inspiré de son approche, avec toutefois
+  quelques petites simplifications (étant donné que je n’avais pas besoin de
+  certaines fonctionnalités).
+</p>
+
+    <figure class="code">
+      <figcaption>highlight.rb</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+</pre></td><td class="rouge-code"><pre><span class="nb">require</span> <span class="s1">'json'</span>
+
+<span class="nb">require</span> <span class="s1">'rouge'</span>
+
+<span class="no">Nanoc</span><span class="o">::</span><span class="no">Filter</span><span class="p">.</span><span class="nf">define</span><span class="p">(</span><span class="ss">:highlight</span><span class="p">)</span> <span class="k">do</span> <span class="o">|</span><span class="n">content</span><span class="p">,</span> <span class="n">_params</span><span class="o">|</span>
+  <span class="n">content</span><span class="p">.</span><span class="nf">gsub</span><span class="p">(</span><span class="sr">/```(?&lt;options&gt;\{[^}]*\})?\n(?&lt;code&gt;.+?)```$/m</span><span class="p">)</span> <span class="k">do</span>
+    <span class="c1"># Get options.</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="no">JSON</span><span class="p">.</span><span class="nf">parse</span><span class="p">(</span><span class="no">Regexp</span><span class="p">.</span><span class="nf">last_match</span><span class="p">(</span><span class="ss">:options</span><span class="p">)</span> <span class="o">||</span> <span class="s1">'{}'</span><span class="p">)</span>
+    <span class="n">lang</span>    <span class="o">=</span> <span class="n">options</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="s1">'lang'</span><span class="p">,</span> <span class="s1">'text'</span><span class="p">)</span>
+    <span class="n">title</span>   <span class="o">=</span> <span class="n">options</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="s1">'title'</span><span class="p">,</span> <span class="s1">''</span><span class="p">)</span>
+    <span class="n">linenos</span> <span class="o">=</span> <span class="n">options</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="s1">'linenos'</span><span class="p">,</span> <span class="kp">true</span><span class="p">)</span>
+    <span class="c1"># Highlight code.</span>
+    <span class="n">formatter</span> <span class="o">=</span> <span class="no">Rouge</span><span class="o">::</span><span class="no">Formatters</span><span class="o">::</span><span class="no">HTML</span><span class="p">.</span><span class="nf">new</span>
+    <span class="n">formatter</span> <span class="o">=</span> <span class="no">Rouge</span><span class="o">::</span><span class="no">Formatters</span><span class="o">::</span><span class="no">HTMLTable</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">formatter</span><span class="p">)</span> <span class="k">if</span> <span class="n">linenos</span>
+    <span class="n">lexer</span> <span class="o">=</span> <span class="no">Rouge</span><span class="o">::</span><span class="no">Lexer</span><span class="p">.</span><span class="nf">find</span><span class="p">(</span><span class="n">lang</span><span class="p">)</span>
+    <span class="n">code</span>  <span class="o">=</span> <span class="n">formatter</span><span class="p">.</span><span class="nf">format</span><span class="p">(</span><span class="n">lexer</span><span class="p">.</span><span class="nf">lex</span><span class="p">(</span><span class="no">Regexp</span><span class="p">.</span><span class="nf">last_match</span><span class="p">(</span><span class="ss">:code</span><span class="p">)))</span>
+    <span class="c1"># Wrap the result.</span>
+    <span class="n">title</span> <span class="o">=</span> <span class="s2">"&lt;figcaption&gt;</span><span class="si">#{</span><span class="n">title</span><span class="si">}</span><span class="s2">&lt;/figcaption&gt;"</span> <span class="k">unless</span> <span class="n">title</span><span class="p">.</span><span class="nf">empty?</span>
+    <span class="n">code</span>  <span class="o">=</span> <span class="s2">"&lt;pre&gt;</span><span class="si">#{</span><span class="n">code</span><span class="si">}</span><span class="s2">&lt;/pre&gt;"</span> <span class="k">unless</span> <span class="n">linenos</span>
+    <span class="o">&lt;&lt;-</span><span class="no">HTML</span><span class="sh">
+    &lt;figure class="code"&gt;
+      </span><span class="si">#{</span><span class="n">title</span><span class="si">}</span><span class="sh">
+      &lt;div class="highlight"&gt;
+        </span><span class="si">#{</span><span class="n">code</span><span class="si">}</span><span class="sh">
+      &lt;/div&gt;
+    &lt;/figure&gt;
+</span><span class="no">    HTML</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<h3>La gestion des catégories</h3>
+
+<p>
+  Nanoc fourni déjà
+  <a href="https://nanoc.app/doc/reference/helpers/#tagging">quelques fonctions</a>
+  pour gérer les catégories sur les articles. Malheureusement ces fonctions ne
+  gèrent pas très bien les catégories qui contiennent des espaces (« Trucs et
+  astuces » par exemple), et cela pose problème si l’on souhaite utiliser une
+  catégorie en tant qu’ancre ou ID HTML.
+</p>
+
+<p>J’ai donc réimplémenté moi-même certaines de ces fonctions :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+</pre></td><td class="rouge-code"><pre><span class="c1"># Return the articles tagged with `tag`, sorted by descending creation date.</span>
+<span class="k">def</span> <span class="nf">articles_with_tag</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span>
+  <span class="n">sorted_articles</span><span class="p">.</span><span class="nf">select</span> <span class="p">{</span> <span class="o">|</span><span class="n">article</span><span class="o">|</span> <span class="n">article</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="ss">:tags</span><span class="p">,</span> <span class="p">[]).</span><span class="nf">include?</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span> <span class="p">}</span>
+<span class="k">end</span>
+
+<span class="c1"># Return a formatted list of tags for the given item as a string.</span>
+<span class="k">def</span> <span class="nf">tags_for</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="ss">separator: </span><span class="s1">', '</span><span class="p">)</span>
+  <span class="n">base_url</span> <span class="o">=</span> <span class="s1">'/blog/tags/#'</span>
+  <span class="n">item</span><span class="p">[</span><span class="ss">:tags</span><span class="p">].</span><span class="nf">map</span> <span class="k">do</span> <span class="o">|</span><span class="n">tag</span><span class="o">|</span>
+    <span class="sx">%(&lt;a href="#{base_url}#{to_html_id(tag)}" rel="tag"&gt;#{tag}&lt;/a&gt;)</span>
+  <span class="k">end</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="n">separator</span><span class="p">)</span>
+<span class="k">end</span>
+
+<span class="c1"># Return a version of `str` that can be used as an HTML ID.</span>
+<span class="k">def</span> <span class="nf">to_html_id</span><span class="p">(</span><span class="n">str</span><span class="p">)</span>
+  <span class="n">str</span><span class="p">.</span><span class="nf">downcase</span><span class="p">.</span><span class="nf">tr</span><span class="p">(</span><span class="s1">' '</span><span class="p">,</span> <span class="s1">'-'</span><span class="p">)</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Au passage, j’ai également dû coder une fonction qui me renvoie la liste des
+  catégories triée par ordre alphabétique. Le fait que j’utilise le français
+  implique que je ne peux pas utiliser la fonction <code>sort</code> de Ruby car
+  elle ne gère pas correctement l’ordre des caractères non ASCII.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>['Développement', 'Divers', 'Design Patterns'].sort
+=&gt; ["Design Patterns", "Divers", "Développement"]
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  On voit que <code>Dé</code> est placé après <code>Di</code>, ce qui est
+  incorrect : il devrait être placé avant <code>Di</code> (mais bien
+  après <code>De</code>). Pour pallier au problème, j’ai utilisé la gem
+  <a href="https://github.com/grosser/sort_alphabetical">sort_alphabetical</a> :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>['Développement', 'Divers', 'Design Patterns'].sort_alphabetical
+=&gt; ["Design Patterns", "Développement", "Divers"]
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Cette fois, l’ordre est correct. Il suffit ensuite d’utiliser cette fonction
+  sur la liste des catégories :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre><span class="nb">require</span> <span class="s1">'sort_alphabetical'</span>
+
+<span class="c1"># Return a list of existing tags, sorted alphabetically.</span>
+<span class="k">def</span> <span class="nf">tags</span>
+  <span class="vi">@items</span><span class="p">.</span><span class="nf">inject</span><span class="p">(</span><span class="no">Set</span><span class="p">.</span><span class="nf">new</span><span class="p">)</span> <span class="k">do</span> <span class="o">|</span><span class="n">tags</span><span class="p">,</span> <span class="n">item</span><span class="o">|</span>
+    <span class="n">tags</span><span class="p">.</span><span class="nf">merge</span><span class="p">(</span><span class="n">item</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="ss">:tags</span><span class="p">,</span> <span class="p">[]))</span>
+  <span class="k">end</span><span class="p">.</span><span class="nf">to_a</span><span class="p">.</span><span class="nf">sort_alphabetical</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<h3>Les vérifications automatisées</h3>
+
+<p>
+  Nanoc propose
+  <a href="https://nanoc.app/doc/testing/">un système de validation</a> qui
+  permet d’exécuter (manuellement ou avant de déployer le site) des étapes de
+  vérifications sur le contenu du site généré. C’est extrêmement pratique pour
+  détecter des erreurs (telles que des liens cassés) lors du développement/avant
+  de déployer le site.
+</p>
+
+<p>
+  J’ai donc mit à jour mon <code>nanoc.yaml</code> pour activer les
+  vérifications suivantes :
+</p>
+
+<ul>
+  <li><code>css_local</code></li>
+  <li><code>html_local</code></li>
+  <li><code>atom</code></li>
+  <li><code>sitemap</code></li>
+  <li><code>external_links</code></li>
+  <li><code>internal_links</code></li>
+  <li><code>stale</code></li>
+</ul>
+
+<p>
+  <code>external_links</code>, <code>internal_links</code> et <code>stale</code>
+  sont fournis par Nanoc. Les deux premiers vérifient que les liens utilisés
+  sont valides et le dernier vérifie qu’il n’y a pas de fichiers inattendu dans
+  le répertoire qui est copié lors du déploiement.
+</p>
+
+<h4>HTML et CSS</h4>
+
+<p>
+  <code>css_local</code> et <code>html_local</code> vérifient que le CSS et le
+  HTML sont bien valides. Nanoc propose déjà ce genre de vérification
+  via <code>css</code> et <code>html</code>, mais ils ne me convenaient pas pour
+  les raisons suivantes :
+</p>
+
+<ul>
+  <li>
+    ils ne remontent que les erreurs, or les avertissements sont parfois
+    intéressants à prendre en compte (même si pas obligatoire).
+  </li>
+  <li>
+    ils fonctionnent en faisant des requêtes sur
+    <a href="https://validator.w3.org/">les validateurs du W3C</a>, ce qui
+    requiert d’avoir un accès à Internet.
+  </li>
+</ul>
+
+<p>
+  C’est pourquoi j’ai implémenté <code>css_local</code>
+  et <code>html_local</code> qui utilisent un
+  <a href="https://github.com/validator/validator">validatornu</a>
+  installé localement.
+  <br />
+  Un autre avantage à cela, en plus de fonctionner hors-ligne, est que je peux
+  maintenant avoir accès aux avertissements (et ignorer ceux qui me semblent non
+  pertinents).
+</p>
+
+    <figure class="code">
+      <figcaption>css_local</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+</pre></td><td class="rouge-code"><pre><span class="no">Nanoc</span><span class="o">::</span><span class="no">Check</span><span class="p">.</span><span class="nf">define</span><span class="p">(</span><span class="ss">:css_local</span><span class="p">)</span> <span class="k">do</span>
+  <span class="nb">require</span> <span class="s1">'json'</span>
+  <span class="nb">require</span> <span class="s1">'open3'</span>
+
+  <span class="vi">@output_filenames</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">filename</span><span class="o">|</span>
+    <span class="k">next</span> <span class="k">unless</span> <span class="no">File</span><span class="p">.</span><span class="nf">extname</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span> <span class="o">==</span> <span class="s1">'.css'</span>
+
+    <span class="n">command</span> <span class="o">=</span> <span class="sx">%W[validatornu --css --format json </span><span class="si">#{</span><span class="n">filename</span><span class="si">}</span><span class="sx">]</span>
+    <span class="n">output</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="no">Open3</span><span class="p">.</span><span class="nf">capture2e</span><span class="p">(</span><span class="o">*</span><span class="n">command</span><span class="p">)</span>
+    <span class="k">next</span> <span class="k">if</span> <span class="n">output</span><span class="p">.</span><span class="nf">empty?</span>
+
+    <span class="no">JSON</span><span class="p">.</span><span class="nf">parse</span><span class="p">(</span><span class="n">output</span><span class="p">)[</span><span class="s1">'messages'</span><span class="p">].</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">error</span><span class="o">|</span>
+      <span class="n">reason</span> <span class="o">=</span> <span class="n">error</span><span class="p">[</span><span class="s1">'message'</span><span class="p">].</span><span class="nf">delete_prefix</span><span class="p">(</span><span class="s1">'CSS: '</span><span class="p">)</span>
+      <span class="n">errmsg</span> <span class="o">=</span> <span class="s2">"l.</span><span class="si">#{</span><span class="n">error</span><span class="p">[</span><span class="s1">'lastLine'</span><span class="p">]</span><span class="si">}</span><span class="s2"> - </span><span class="si">#{</span><span class="n">reason</span><span class="si">}</span><span class="s2">"</span>
+      <span class="n">add_issue</span><span class="p">(</span><span class="n">errmsg</span><span class="p">,</span> <span class="ss">subject: </span><span class="n">filename</span><span class="p">)</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+    <figure class="code">
+      <figcaption>html_local</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+</pre></td><td class="rouge-code"><pre><span class="no">Nanoc</span><span class="o">::</span><span class="no">Check</span><span class="p">.</span><span class="nf">define</span><span class="p">(</span><span class="ss">:html_local</span><span class="p">)</span> <span class="k">do</span>
+  <span class="nb">require</span> <span class="s1">'json'</span>
+  <span class="nb">require</span> <span class="s1">'open3'</span>
+
+  <span class="no">IGNORE_LIST</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="c1"># Nope, that's not the HTML5 way.</span>
+    <span class="s1">'Consider using the “h1” element as a top-level heading only'</span><span class="p">,</span>
+    <span class="c1"># My &lt;article&gt; use h1, they have header…</span>
+    <span class="s1">'Article lacks heading. Consider using “h2”-“h6”'</span>
+  <span class="p">].</span><span class="nf">freeze</span>
+
+  <span class="vi">@output_filenames</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">filename</span><span class="o">|</span>
+    <span class="k">next</span> <span class="k">unless</span> <span class="no">File</span><span class="p">.</span><span class="nf">extname</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span> <span class="o">==</span> <span class="s1">'.html'</span>
+
+    <span class="n">command</span> <span class="o">=</span> <span class="sx">%W[validatornu --html --format json </span><span class="si">#{</span><span class="n">filename</span><span class="si">}</span><span class="sx">]</span>
+    <span class="n">output</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="no">Open3</span><span class="p">.</span><span class="nf">capture2e</span><span class="p">(</span><span class="o">*</span><span class="n">command</span><span class="p">)</span>
+    <span class="k">next</span> <span class="k">if</span> <span class="n">output</span><span class="p">.</span><span class="nf">empty?</span>
+
+    <span class="no">JSON</span><span class="p">.</span><span class="nf">parse</span><span class="p">(</span><span class="n">output</span><span class="p">)[</span><span class="s1">'messages'</span><span class="p">].</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">error</span><span class="o">|</span>
+      <span class="n">errmsg</span> <span class="o">=</span> <span class="n">error</span><span class="p">[</span><span class="s1">'message'</span><span class="p">]</span>
+      <span class="k">next</span> <span class="k">if</span> <span class="no">IGNORE_LIST</span><span class="p">.</span><span class="nf">any?</span> <span class="p">{</span> <span class="o">|</span><span class="n">str</span><span class="o">|</span> <span class="n">errmsg</span><span class="p">.</span><span class="nf">include?</span><span class="p">(</span><span class="n">str</span><span class="p">)</span> <span class="p">}</span>
+
+      <span class="n">add_issue</span><span class="p">(</span><span class="s2">"l.</span><span class="si">#{</span><span class="n">error</span><span class="p">[</span><span class="s1">'lastLine'</span><span class="p">]</span><span class="si">}</span><span class="s2"> - </span><span class="si">#{</span><span class="n">errmsg</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="ss">subject: </span><span class="n">filename</span><span class="p">)</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<h4>Sitemap</h4>
+
+<p>
+  <code>sitemap</code> vérifie, à l’aide de l’excellente bibiothèque
+  <a href="https://nokogiri.org/">Nokogiri</a>, que le <code>sitemap.xml</code>
+  généré est un XML valide <strong>ET</strong> qu’il respecte bien le schéma
+  attendu (j’ai récupéré le <code>sitemap.xsd</code> dans
+  <a href="https://github.com/kAworu/kaworu.ch/">les sources du blog de kAworu</a>).
+</p>
+
+
+    <figure class="code">
+      <figcaption>sitemap</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+</pre></td><td class="rouge-code"><pre><span class="no">Nanoc</span><span class="o">::</span><span class="no">Check</span><span class="p">.</span><span class="nf">define</span><span class="p">(</span><span class="ss">:sitemap</span><span class="p">)</span> <span class="k">do</span>
+  <span class="nb">require</span> <span class="s1">'nokogiri'</span>
+
+  <span class="vi">@output_filenames</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">filename</span><span class="o">|</span>
+    <span class="k">next</span> <span class="k">unless</span> <span class="no">File</span><span class="p">.</span><span class="nf">basename</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span> <span class="o">==</span> <span class="s1">'sitemap.xml'</span>
+
+    <span class="n">xsd</span> <span class="o">=</span> <span class="no">Nokogiri</span><span class="o">::</span><span class="no">XML</span><span class="o">::</span><span class="no">Schema</span><span class="p">(</span><span class="no">File</span><span class="p">.</span><span class="nf">read</span><span class="p">(</span><span class="s1">'misc/sitemap.xsd'</span><span class="p">))</span>
+    <span class="n">sitemap</span> <span class="o">=</span> <span class="no">Nokogiri</span><span class="o">::</span><span class="no">XML</span><span class="p">(</span><span class="no">File</span><span class="p">.</span><span class="nf">read</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span>
+    <span class="n">xsd</span><span class="p">.</span><span class="nf">validate</span><span class="p">(</span><span class="n">sitemap</span><span class="p">).</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">error</span><span class="o">|</span>
+      <span class="n">add_issue</span><span class="p">(</span><span class="n">error</span><span class="p">.</span><span class="nf">message</span><span class="p">,</span> <span class="ss">subject: </span><span class="n">filename</span><span class="p">)</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<h4>Atom</h4>
+
+<p>
+  Pour <code>atom</code> c’est le même principe que <code>sitemap</code> : on
+  utilise Nokogiri pour valider le XML de <code>atom.xml</code>, ainsi que la
+  validité du schéma.
+</p>
+
+    <figure class="code">
+      <figcaption>atom</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+</pre></td><td class="rouge-code"><pre><span class="no">Nanoc</span><span class="o">::</span><span class="no">Check</span><span class="p">.</span><span class="nf">define</span><span class="p">(</span><span class="ss">:atom</span><span class="p">)</span> <span class="k">do</span>
+  <span class="nb">require</span> <span class="s1">'nokogiri'</span>
+
+  <span class="vi">@output_filenames</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">filename</span><span class="o">|</span>
+    <span class="k">next</span> <span class="k">unless</span> <span class="no">File</span><span class="p">.</span><span class="nf">basename</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span> <span class="o">==</span> <span class="s1">'atom.xml'</span>
+
+    <span class="n">rng</span> <span class="o">=</span> <span class="no">Nokogiri</span><span class="o">::</span><span class="no">XML</span><span class="o">::</span><span class="no">RelaxNG</span><span class="p">(</span><span class="no">File</span><span class="p">.</span><span class="nf">read</span><span class="p">(</span><span class="s1">'misc/atom.rng'</span><span class="p">))</span>
+    <span class="n">sitemap</span> <span class="o">=</span> <span class="no">Nokogiri</span><span class="o">::</span><span class="no">XML</span><span class="p">(</span><span class="no">File</span><span class="p">.</span><span class="nf">read</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span>
+    <span class="n">rng</span><span class="p">.</span><span class="nf">validate</span><span class="p">(</span><span class="n">sitemap</span><span class="p">).</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">error</span><span class="o">|</span>
+      <span class="n">add_issue</span><span class="p">(</span><span class="n">error</span><span class="p">.</span><span class="nf">message</span><span class="p">,</span> <span class="ss">subject: </span><span class="n">filename</span><span class="p">)</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  On remarquera que cette fois le schéma n’est pas défini par un
+  fichier <code>.xsd</code>. En effet, il n’y a pas de <em>XSD</em>
+  (<em>XML Schema Definition</em>) officielle pour le format Atom. La
+  <a href="https://validator.w3.org/feed/docs/rfc4287.html#rfc.section.B">RFC 4287</a>
+  fourni une spécification <em>Relax NG</em> (<em><strong>Re</strong>gular
+  <strong>La</strong>nguage for <strong>X</strong>ML <strong>N</strong>ext
+  <strong>G</strong>eneration</em>). Cependant il y a un problème : la
+  RFC utilise la
+  <a href="https://relaxng.org/compact-20021121.html">syntaxe compacte</a>, et
+  cette syntaxe ne peut pas être utilisée par Nokogiri. Heureusement, il est
+  possible de la convertir en syntaxe standard (utilisable par Nokogiri)
+  avec <a href="https://relaxng.org/jclark/trang.html">trang</a>.
+</p>
+
+<h2>Conclusion</h2>
+
+<p>
+  La migration fut relativement simple, je n’ai pas eu trop de glue à faire
+  moi-même. Seule la conversion des articles en Markdown vers eRuby a été un peu
+  laborieuse, mais ça m’a permis de fixer deux ou trois trucs au passage, donc
+  plutôt positif au final.
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2019-11-17T00:00:00Z"
+            itemprop="datePublished">
+        2019-11-17
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#divers" rel="tag">Divers</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

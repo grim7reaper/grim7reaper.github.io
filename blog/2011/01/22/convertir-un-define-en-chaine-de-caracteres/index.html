@@ -1,0 +1,294 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Convertir un #define en chaîne de caractères — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2011/01/22/convertir-un-define-en-chaine-de-caracteres/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Convertir un #define en chaîne de caractères</h1>
+
+  <p><em>Cet article provient de mon ancien site Internet.</em></p>
+
+<h2>À quoi ça sert ?</h2>
+
+<p>Très bonne question !</p>
+
+<p>
+  À quoi ça peut bien servir de convertir un <code>#define</code> en chaîne de
+  caractères ?
+  Et bien, pour l’afficher pardi !
+</p>
+
+<p>
+  J’en vois déjà certains venir en grognant : « Le <em>debug</em> à coup
+  de <code>printf</code> c’est crade ! ». Bah non ! Enfin, ça dépend de comment
+  c’est mis en place : si c’est sous forme de logs, ça peut être très propre. Et
+  puis des fois, on n’a que les logs pour debugger…
+</p>
+
+<p>
+  Certains me diront que l’on peut utiliser directement <code>printf</code>, et
+  ils n’ont pas tout à fait tort. Mais en fait ça devient vite chiant pour deux
+  raisons :
+</p>
+
+<ol>
+  <li>
+    Si vous changez le type d’un de vos <code>#define</code>, vous êtes bon pour
+    modifier toutes vos chaînes de format. Ok, certains compilateurs (comme gcc
+    une fois bien réglé) peuvent vous aider à repérer ces endroits, mais le
+    remplacement reste à votre charge ;
+  </li>
+  <li>
+    Si vous voulez afficher une macro substituée (toujours à des fins
+    de <em>debug</em>, pour voir si une macro est bien développée comme prévu),
+    vous allez faire comment avec <code>printf</code> ? Certes, gcc (et clang)
+    propose l’option <code>-E</code> pour voir le code après passage du
+    préprocesseur (fort pratique), mais quid des autres compilateurs (on n’a pas
+    toujours la possibilité de bosser avec de bons compilateurs) ?
+  </li>
+</ol>
+
+
+<h2>Et comment on fait ça ?</h2>
+
+<h3>Première tentative</h3>
+
+<p>
+  Comme vous êtes des gens un minimum cultivé en C, vous avez tout de suite
+  pensé à l’opérateur <code>#</code> qui permet de convertir un paramètre de
+  macro en chaîne de caractères.
+</p>
+
+<p>
+  Bien vu ! C’est comme cela qu’il faut procéder. Allez, faisons quelques tests.
+</p>
+
+    <figure class="code">
+      <figcaption>Premier jet</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdio.h&gt;
+</span>
+<span class="cp">#define TO_STR(a) #a
+</span>
+<span class="cp">#define DOT       '.'
+#define INTEGER   42
+#define MY_PI     3.14
+#define STRING    "42"
+#define SQUARE(x) ((x)*(x))
+</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">puts</span><span class="p">(</span><span class="n">TO_STR</span><span class="p">(</span><span class="n">DOT</span><span class="p">));</span>
+    <span class="n">puts</span><span class="p">(</span><span class="n">TO_STR</span><span class="p">(</span><span class="n">INTEGER</span><span class="p">));</span>
+    <span class="n">puts</span><span class="p">(</span><span class="n">TO_STR</span><span class="p">(</span><span class="n">MY_PI</span><span class="p">));</span>
+    <span class="n">puts</span><span class="p">(</span><span class="n">TO_STR</span><span class="p">(</span><span class="n">STRING</span><span class="p">));</span>
+    <span class="n">puts</span><span class="p">(</span><span class="n">TO_STR</span><span class="p">(</span><span class="n">SQUARE</span><span class="p">(</span><span class="n">SQUARE</span><span class="p">(</span><span class="n">INTEGER</span><span class="p">))));</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Et maintenant, testons ce code.</p>
+
+    <figure class="code">
+      <figcaption>Résultat</figcaption>
+      <div class="highlight">
+        <pre>DOT
+INTEGER
+MY_PI
+STRING
+SQUARE(SQUARE(INTEGER))
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Hum :-/, ce n’est pas vraiment le résultat attendu (on affiche les symboles à
+  la place des valeurs). Mais alors, où est le problème ?
+</p>
+
+<h3>Petite explication</h3>
+
+<p>
+  Et bien comme souvent, il suffit de lire la norme. Et
+  <a href="/static/misc/normeC99.pdf">la norme</a>
+  (<em>ISO/IEC 9899:TC3</em>, 6.10.3 Macro replacement, page 152) nous dit :
+</p>
+
+<blockquote>
+  <p>
+    If a # preprocessing token, followed by an identifier, occurs lexically at
+    the point at which a preprocessing directive could begin, the identifier is
+    not subject to macro replacement.
+  </p>
+  <footer>
+    <strong>ISO/IEC 9899:TC3</strong>
+    <cite>
+      <a href='http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1256.pdf'>www.open-std.org/jtc1/sc22/wg14/www/docs/n1256</a>
+    </cite>
+  </footer>
+</blockquote>
+
+<p>
+  Donc, si le symbole qui suit l’opérateur <code>#</code> est en fait un
+  identifiant, il ne sera pas substitué. Cela explique la sortie produite par le
+  code précèdent.
+</p>
+
+<p>
+  Par exemple, pour <code>INTEGER</code>, <code>TO_STR(INTEGER)</code> est
+  remplacé par <code>#INTEGER</code> lors de la substitution de la macro, puis
+  l’opérateur <code>#</code> est appliqué (ici pas de substitution à cause de la
+  règle précedemment citée, donc <code>INTEGER</code> n’est pas remplacé par 42)
+  et on obtient la chaîne de caractères INTEGER.
+</p>
+
+<h3>La solution</h3>
+
+<p>
+  La solution est simple, si l’opérateur <code>#</code> ne fait pas la
+  substitution il nous suffit de la faire nous‑même avant l’appel. Pour cela,
+  nous allons utiliser une macro intermédiaire.
+</p>
+
+<p>Notre définition de <code>TO_STR</code> devient donc :</p>
+
+    <figure class="code">
+      <figcaption>Version fonctionelle</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre><span class="cp">#define TO_STR_(a) #a
+#define TO_STR(a)  TO_STR_(a)
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Et voilà, maintenant on obtient bien le résultat attendu.</p>
+
+    <figure class="code">
+      <figcaption>Résultat</figcaption>
+      <div class="highlight">
+        <pre>'.'
+42
+3.14
+"42"
+((((42)*(42)))*(((42)*(42))))
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Par exemple, pour <code>INTEGER</code>, <code>TO_STR(INTEGER)</code> est
+  remplacé par <code>TO_STR_(42)</code> (la première macro fait la substitution)
+  puis la seconde macro est remplacée à son tour et l’on
+  obtient <code>#42</code>. Une fois l’opérateur <code>#</code> appliqué on
+  obtient bien la chaîne de caractères 42.
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2011-01-22T00:00:00Z"
+            itemprop="datePublished">
+        2011-01-22
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#c" rel="tag">C</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,228 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>À la recherche de l’espace (disque) perdu… — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2016/10/11/a-la-recherche-de-lespace-disque-perdu/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>À la recherche de l’espace (disque) perdu…</h1>
+
+  <p>
+  La semaine dernière j’ai aidé à résoudre un problème assez surprenant : une
+  partition racine pleine selon <code>df</code> (ou
+  <a href="https://projects.gw-computing.net/projects/dfc">dfc</a>) :
+</p>
+
+
+    <figure class="code">
+      <figcaption>df -h</figcaption>
+      <div class="highlight">
+        <pre>FILESYSTEM               (=) USED      FREE (-)  %USED AVAILABLE  TOTAL MOUNTED ON
+[…]
+/dev/dm-0                [====================]   100%     15.6G  15.6G /
+[…]
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Mais lorsque l’on essaye de trouver les coupables via
+  <a href="https://dev.yorhel.nl/ncdu">ncdu</a>, la somme est loin de faire
+  16Go :
+</p>
+
+    <figure class="code">
+      <figcaption>ncdu -x</figcaption>
+      <div class="highlight">
+        <pre>    .   3.8GiB [##########] /var
+        1.2GiB [###       ] /srv
+      885.2MiB [##        ] /opt
+      223.0MiB [          ] /lib
+    .  95.4MiB [          ] /etc
+    […]
+</pre>
+      </div>
+    </figure>
+
+
+<p>Surprenant !</p>
+
+<h2>Les fichiers perdus dans les limbes</h2>
+
+<p>
+  Après réflexion, je me suis souvenu que certains fichiers pouvaient rester
+  bloqués dans les limbes. En effet, il faut savoir que, sous Linux, quand un
+  fichier est supprimé (avec <code>rm</code> par exemple), il n’est pas
+  réellement supprimé tant qu’au moins un processus utilise ledit fichier. Par
+  conséquent, même si le fichier n’est plus affiché par <code>ls</code>
+  ou <code>find</code>, il occupe toujours de l’espace sur le disque.
+</p>
+
+<p>
+  Pour lister ces fichiers, on ne peut pas utiliser les commandes habituelles
+  telles que <code>ls</code> ou <code>find</code>, mais on peut
+  utiliser <code>lsof</code> qui est une commande qui liste les fichiers ouverts
+  (<code>lsof</code> => <em>list open files</em>). La sortie
+  de <code>lsof</code> est très verbeuse, heureusement en lisant sa page de
+  manuel (<code>man 8 lsof</code>) on y trouve l’option <code>L</code> qui peut
+  être suivi d’un nombre. Lorsque <code>L</code> est suivi d’un
+  nombre <code>N</code>, <code>lsof</code> va uniquement lister les fichiers qui
+  sont référencé un nombre de fois strictement inférieur à <code>N</code>. Dans
+  notre cas, comme on veut lister les fichiers supprimés (qui ne sont donc plus
+  référencés) il faut utiliser <code>L1</code> pour lister les fichier ayant 0
+  référence.
+</p>
+
+<p>
+  En combinant <code>lsof +L1</code> avec la commande <code>sort</code> on peut
+  trier par taille pour voir quels sont les fichiers occupant le plus de place.
+</p>
+
+<p>
+  La commande finale est donc <code>lsof -s +L1 | sort -nk7</code> ce qui se
+  traduit par : liste (<code>lsof</code>) la taille (<code>-s</code>) de tout
+  les fichiers supprimés et encore ouvert (<code>+L1</code>) et trie
+  (<code>sort</code>) cette liste de manière numérique (<code>-n</code>) sur le
+  champs 7 (<code>-k7</code>, car c’est le septième champs qui est le champ de
+  la taille).
+</p>
+
+    <figure class="code">
+      <figcaption>Exemple de sortie</figcaption>
+      <div class="highlight">
+        <pre>% lsof -s +L1 | sort -nk7
+
+COMMAND  PID        USER   FD   TYPE DEVICE    SIZE NLINK    NODE NAME
+conky   5372 grim7reaper    0u   CHR 136,16             0      19 /dev/pts/16 (deleted)
+conky   5372 grim7reaper    1u   CHR 136,16             0      19 /dev/pts/16 (deleted)
+conky   5372 grim7reaper    2u   CHR 136,16             0      19 /dev/pts/16 (deleted)
+systemd  709 grim7reaper  txt    REG  254,2 1018520     0 1619496 /usr/lib/systemd/systemd (deleted)
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Cette commande a permis de découvrir que l’espace disque était utilisé par des
+  fichiers temporaires de
+  <a href="https://gnometerminator.blogspot.fr/p/introduction.html">Terminator</a>.
+</p>
+
+<h2>Terminator et libVTE</h2>
+
+<p>Reste à savoir pourquoi Terminator utilise autant d’espace disque.</p>
+
+<p>
+  Tout d’abord il faut savoir que le Terminator en cause ici était configuré
+  pour conserver toutes les sorties des terminaux, sans limite
+  (option <em>Inifinite scrollback</em>). Le problème c’est que
+  les <em>buffers</em> des terminaux sont stockés sur disques et donc que plus
+  les terminaux sont utilisés longtemps et plus il y’a de choses affichées
+  dedans, plus l’espace disque occupé va augmenter.
+</p>
+
+<p>
+  Ce comportement ne vient pas de Terminator lui-même, mais de la
+  <a href="https://github.com/GNOME/vte">libVTE</a> qui est une bibliothèque
+  utilisée pour implémenter des émulateurs de terminaux. Ce bug touche donc tout
+  les terminaux basés sur libVTE (Terminator, Gnome-Terminal, xfce4-terminal,
+  guake, …).
+</p>
+
+<p>
+  Ce comportement existe depuis 2009, il est connu et ne sera probablement pas
+  corrigé, alors même que cela peut poser problème (je vous conseille de lire
+  <a href="http://climagic.org/bugreports/libvte-scrollback-written-to-disk.html">ce rapport de bug</a>
+  qui explique bien la situation)…
+</p>
+
+<h2>Conclusion</h2>
+
+<p>
+  Je pense que je vais continuer d’utiliser
+  <a href="https://web.archive.org/web/20161003144517/https://en.wikipedia.org/wiki/Rxvt-unicode">urxvt</a> :D, qui est
+  l’un des rares terminaux à bien gérer l’espace insécable fine et qui n’est pas
+  basé sur libVTE. Cette petite mésaventure m’aura au moins fait découvrir un
+  aspect fort utile de <code>lsof</code>.
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2016-10-11T00:00:00Z"
+            itemprop="datePublished">
+        2016-10-11
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#trucs-et-astuces" rel="tag">Trucs et Astuces</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,432 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Crackme — GDB — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2013/11/07/crackme-gdb/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Crackme — GDB</h1>
+
+  <p>
+  Le <em>crackme</em> étudié dans cet article provient
+  d’<a href="https://www.root-me.org/fr/Challenges/Cracking/ELF-x86-Basique">ici</a>.
+</p>
+
+<p>
+  Ce second <em>crackme</em> est un peu moins simple que le précédent, mais il
+  est tout de même trivial. En revanche, je me suis compliqué la vie : la
+  solution était en fait bien plus simple que ce que l’on peut penser. Mais au
+  moins, ça me permet de présenter l’usage de GDB ^^
+</p>
+
+<p>
+  Comme la dernière fois, on va commencer par lancer <code>strings</code> sur
+  notre binaire. Cependant, cette fois le nombre de chaîne de caractères est
+  beaucoup plus important (1506 chaînes). Ayant la flemme de regarder cela en
+  détail (pourtant j’aurai dû, comme vous le verrez par la suite), je décide de
+  passer à autre chose.
+</p>
+
+<p>
+  Déjà, on peut remarquer (via la
+  commande <a href="https://linux.die.net/man/1/file">file</a>
+  ou <a href="https://linux.die.net/man/1/ldd">ldd</a>) que l’exécutable est
+  compilé en mode statique (ce qui explique le grand nombre de chaîne de
+  caractères), ça signifie que l’on peut oublier d’office les bidouilles à base
+  de <code>ltrace</code> et autres <code>LD_PRELOAD</code> (ne vous inquiétez
+  pas, on aura l’occasion de s’amuser avec ça dans d’autres défis).
+</p>
+
+<p>
+  Partant de ces premières observations, je décide de partir sur
+  <a href="https://sourceware.org/gdb/current/onlinedocs/gdb/">GDB</a>. Mais
+  avant cela, voyons une exécution normale :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% ./ch2.bin
+############################################################
+##        Bienvennue dans ce challenge de cracking        ##
+############################################################
+
+username: foo
+Bad username
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Ok, il faut donc fournir un nom d’utilisateur avant de pouvoir fournir le mot
+  de passe.
+</p>
+
+<p>
+  Maintenant, passons à GDB. Première chose à faire : placer un point d’arrêt
+  sur la fonction <code>main</code>, puis regarder le code assembleur.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) b main
+Breakpoint 1 at 0x8048317
+(gdb) r
+Starting program: ch2.bin
+
+Breakpoint 1, 0x08048317 in main ()
+(gdb) disass
+Dump of assembler code for function main:
+   0x08048309 &lt;+0&gt;:     lea    0x4(%esp),%ecx
+   0x0804830d &lt;+4&gt;:     and    $0xfffffff0,%esp
+   0x08048310 &lt;+7&gt;:     pushl  -0x4(%ecx)
+   0x08048313 &lt;+10&gt;:    push   %ebp
+   0x08048314 &lt;+11&gt;:    mov    %esp,%ebp
+   0x08048316 &lt;+13&gt;:    push   %ecx
+=&gt; 0x08048317 &lt;+14&gt;:    sub    $0x24,%esp
+   0x0804831a &lt;+17&gt;:    movl   $0x80a6b19,-0xc(%ebp)
+   0x08048321 &lt;+24&gt;:    movl   $0x80a6b1e,-0x10(%ebp)
+   0x08048328 &lt;+31&gt;:    movl   $0x80a6b2c,(%esp)
+   0x0804832f &lt;+38&gt;:    call   0x8048de0 &lt;puts&gt;
+   0x08048334 &lt;+43&gt;:    movl   $0x80a6b6c,(%esp)
+   0x0804833b &lt;+50&gt;:    call   0x8048de0 &lt;puts&gt;
+   0x08048340 &lt;+55&gt;:    movl   $0x80a6bac,(%esp)
+   0x08048347 &lt;+62&gt;:    call   0x8048de0 &lt;puts&gt;
+   0x0804834c &lt;+67&gt;:    movl   $0x80a6bea,(%esp)
+   0x08048353 &lt;+74&gt;:    call   0x8048db0 &lt;printf&gt;
+   0x08048358 &lt;+79&gt;:    mov    -0x8(%ebp),%eax
+   0x0804835b &lt;+82&gt;:    mov    %eax,(%esp)
+   0x0804835e &lt;+85&gt;:    call   0x804826a &lt;getString&gt;
+   0x08048363 &lt;+90&gt;:    mov    %eax,-0x8(%ebp)
+   0x08048366 &lt;+93&gt;:    mov    -0xc(%ebp),%eax
+   0x08048369 &lt;+96&gt;:    mov    %eax,0x4(%esp)
+   0x0804836d &lt;+100&gt;:   mov    -0x8(%ebp),%eax
+   0x08048370 &lt;+103&gt;:   mov    %eax,(%esp)
+   0x08048373 &lt;+106&gt;:   call   0x80502f0 &lt;strcmp&gt;
+   0x08048378 &lt;+111&gt;:   test   %eax,%eax
+   0x0804837a &lt;+113&gt;:   jne    0x80483d0 &lt;main+199&gt;
+   0x0804837c &lt;+115&gt;:   movl   $0x80a6bf5,(%esp)
+   0x08048383 &lt;+122&gt;:   call   0x8048db0 &lt;printf&gt;
+   0x08048388 &lt;+127&gt;:   mov    -0x8(%ebp),%eax
+   0x0804838b &lt;+130&gt;:   mov    %eax,(%esp)
+   0x0804838e &lt;+133&gt;:   call   0x804826a &lt;getString&gt;
+   0x08048393 &lt;+138&gt;:   mov    %eax,-0x8(%ebp)
+   0x08048396 &lt;+141&gt;:   mov    -0x10(%ebp),%eax
+   0x08048399 &lt;+144&gt;:   mov    %eax,0x4(%esp)
+   0x0804839d &lt;+148&gt;:   mov    -0x8(%ebp),%eax
+   0x080483a0 &lt;+151&gt;:   mov    %eax,(%esp)
+   0x080483a3 &lt;+154&gt;:   call   0x80502f0 &lt;strcmp&gt;
+   0x080483a8 &lt;+159&gt;:   test   %eax,%eax
+   0x080483aa &lt;+161&gt;:   jne    0x80483c2 &lt;main+185&gt;
+   0x080483ac &lt;+163&gt;:   movl   $0x80a6c00,0x4(%esp)
+   0x080483b4 &lt;+171&gt;:   movl   $0x80a6c0c,(%esp)
+   0x080483bb &lt;+178&gt;:   call   0x8048db0 &lt;printf&gt;
+   0x080483c0 &lt;+183&gt;:   jmp    0x80483dc &lt;main+211&gt;
+   0x080483c2 &lt;+185&gt;:   movl   $0x80a6c52,(%esp)
+   0x080483c9 &lt;+192&gt;:   call   0x8048de0 &lt;puts&gt;
+   0x080483ce &lt;+197&gt;:   jmp    0x80483dc &lt;main+211&gt;
+   0x080483d0 &lt;+199&gt;:   movl   $0x80a6c5f,(%esp)
+   0x080483d7 &lt;+206&gt;:   call   0x8048de0 &lt;puts&gt;
+   0x080483dc &lt;+211&gt;:   mov    $0x0,%eax
+   0x080483e1 &lt;+216&gt;:   add    $0x24,%esp
+   0x080483e4 &lt;+219&gt;:   pop    %ecx
+   0x080483e5 &lt;+220&gt;:   pop    %ebp
+   0x080483e6 &lt;+221&gt;:   lea    -0x4(%ecx),%esp
+   0x080483e9 &lt;+224&gt;:   ret
+End of assembler dump.
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Information intéressante : il y a deux appels à <code>strcmp</code>. Ça
+  pourrait bien correspondre aux vérifications du nom d’utilisateur et du mot de
+  passe. On va donc placer un point d’arrêt sur <code>strcmp</code> afin de
+  pouvoir examiner son code.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) b *0x80502f0
+Breakpoint 2 at 0x80502f0
+(gdb) c
+Continuing.
+############################################################
+##        Bienvennue dans ce challenge de cracking        ##
+############################################################
+
+username: AAAAAAAA
+
+Breakpoint 2, 0x080502f0 in strcmp ()
+(gdb) disass
+Dump of assembler code for function strcmp:
+=&gt; 0x080502f0 &lt;+0&gt;:     push   %ebp
+   0x080502f1 &lt;+1&gt;:     xor    %edx,%edx
+   0x080502f3 &lt;+3&gt;:     mov    %esp,%ebp
+   0x080502f5 &lt;+5&gt;:     push   %esi
+   0x080502f6 &lt;+6&gt;:     push   %ebx
+   0x080502f7 &lt;+7&gt;:     mov    0x8(%ebp),%esi
+   0x080502fa &lt;+10&gt;:    mov    0xc(%ebp),%ebx
+   0x080502fd &lt;+13&gt;:    lea    0x0(%esi),%esi
+   0x08050300 &lt;+16&gt;:    movzbl (%esi,%edx,1),%eax
+   0x08050304 &lt;+20&gt;:    movzbl (%ebx,%edx,1),%ecx
+   0x08050308 &lt;+24&gt;:    test   %al,%al
+   0x0805030a &lt;+26&gt;:    je     0x8050328 &lt;strcmp+56&gt;
+   0x0805030c &lt;+28&gt;:    add    $0x1,%edx
+   0x0805030f &lt;+31&gt;:    cmp    %cl,%al
+   0x08050311 &lt;+33&gt;:    je     0x8050300 &lt;strcmp+16&gt;
+   0x08050313 &lt;+35&gt;:    movzbl %al,%edx
+   0x08050316 &lt;+38&gt;:    movzbl %cl,%eax
+   0x08050319 &lt;+41&gt;:    sub    %eax,%edx
+   0x0805031b &lt;+43&gt;:    mov    %edx,%eax
+   0x0805031d &lt;+45&gt;:    pop    %ebx
+   0x0805031e &lt;+46&gt;:    pop    %esi
+   0x0805031f &lt;+47&gt;:    pop    %ebp
+   0x08050320 &lt;+48&gt;:    ret    
+   0x08050321 &lt;+49&gt;:    lea    0x0(%esi,%eiz,1),%esi
+   0x08050328 &lt;+56&gt;:    movzbl %cl,%edx
+   0x0805032b &lt;+59&gt;:    neg    %edx
+   0x0805032d &lt;+61&gt;:    mov    %edx,%eax
+   0x0805032f &lt;+63&gt;:    pop    %ebx
+   0x08050330 &lt;+64&gt;:    pop    %esi
+   0x08050331 &lt;+65&gt;:    pop    %ebp
+   0x08050332 &lt;+66&gt;:    ret    
+End of assembler dump.
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  On prend soin d’utiliser une chaîne très facilement reconnaissable en tant que
+  nom d’utilisateur, ça peut être utile par la suite.
+  <br />
+  En analysant le code on voit que la comparaison (instruction <code>cmp</code>
+  à l’adresse 0x0805030f) se fait sur le contenu des registres <code>cl</code>
+  et <code>al</code>. Ces registres correspondent en fait aux registres 32-bit
+  <code>ecx</code> et <code>eax</code> traités comme des registres 8-bit. Or, on
+  voit que les valeurs de ces registres sont chargées à partir des adresses
+  contenues dans <code>esi</code> (pour <code>eax</code>) et <code>ebx</code>
+  (pour <code>ecx</code>) via des instructions <code>movzbl</code>. Il suffit
+  donc de mettre un point d’arrêt après le chargement des adresses dans
+  <code>esi</code> et <code>ebx</code> afin de pouvoir afficher les chaînes de
+  caractères :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) b *0x08050300
+Breakpoint 3 at 0x8050300
+(gdb) c
+Continuing.
+
+Breakpoint 3, 0x08050300 in strcmp ()
+(gdb) p (char*)$esi
+$1 = 0x80c8688 "AAAAAAAA"
+(gdb) p (char*)$ebx
+$2 = 0x80a6b19 "john"
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  On reconnaît notre chaîne AAAAAAAA dans <code>esi</code>, c’est
+  donc <code>ebx</code> qui contient le nom d’utilisateur. On découvre alors que
+  le nom d’utilisateur est john.
+</p>
+
+<p>
+  Comme nous avons donné un mauvais mot de passe, le programme va se terminer
+  avant que nous puissions découvrir le mot de passe. Pour éviter cela, nous
+  allons modifier la valeur de retour de <code>strcmp</code>. On commence par
+  ajouter un point d’arrêt juste après le premier appel de <code>strcmp</code>
+  dans <code>main</code>, puis on placera 0 (valeur de retour
+  de <code>strcmp</code> lorsque les deux chaînes sont identiques) dans le
+  registre <code>eax</code> (registre utilisé pour stocker la valeur de retour,
+  ce comportement est défini par la
+  <a href="https://en.wikipedia.org/wiki/Calling_convention">convention d’appel</a>
+  utilisée) avant de continuer l’exécution.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) b *0x08048378
+Breakpoint 4 at 0x8048378
+(gdb) c
+Continuing.
+
+Breakpoint 4, 0x08048378 in main ()
+(gdb) set $eax = 0
+(gdb) c
+Continuing.
+password: BBBBBBBB
+
+Breakpoint 2, 0x080502f0 in strcmp ()
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Comme prévu, il nous demande le mot de passe et l’on se retrouve à nouveau
+  dans <code>strcmp</code>. En appliquant le même principe que précédemment on
+  obtient le mot de passe.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) c
+Continuing.
+
+Breakpoint 3, 0x08050300 in strcmp ()
+(gdb) p (char*)$ebx
+$3 = 0x80a6b1e "the ripper"
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Étant maintenant en possession des identifiants, on peut récupérer le code
+  secret :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% ./ch2.bin
+############################################################
+##        Bienvennue dans ce challenge de cracking        ##
+############################################################
+
+username: john
+password: the ripper
+Bien joue, vous pouvez valider l'epreuve avec le mot de passe : 987654321 !
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Gagné !
+  <br />
+  Le mot de passe était donc 987654321.
+</p>
+
+<h2>Le mot de la fin</h2>
+
+<p>
+  Pour information, tout cela était inutile. En effet, la sortie
+  de <code>strings</code> nous donnait déjà toutes les informations nécessaires
+  (pour peu que l’on prenne le temps de la regarder de plus près) :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% strings ch2.bin
+[…]
+john
+the ripper
+[…]
+987654321
+[…]
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  On voit donc que le nom d’utilisateur et le mot de passe était en clair dans
+  le binaire. Pis encore : le code à obtenir (987654321) est lui aussi en clair
+  dans le binaire. On n’avait même pas besoin de connaître le nom d’utilisateur
+  et le mot de passe pour y accéder.
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2013-11-07T00:00:00Z"
+            itemprop="datePublished">
+        2013-11-07
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#rétroingénierie" rel="tag">Rétroingénierie</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

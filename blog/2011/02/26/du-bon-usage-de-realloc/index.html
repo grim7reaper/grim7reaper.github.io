@@ -1,0 +1,243 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Du bon usage de realloc() — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2011/02/26/du-bon-usage-de-realloc/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Du bon usage de realloc()</h1>
+
+  <p><em>Cet article provient de mon ancien site Internet.</em></p>
+
+<h2>realloc()</h2>
+
+<p>
+  <code>realloc</code> est une fonction de la bibliothèque standard du C, pour
+  l’utiliser il suffit d’inclure l’en‑tête <code>stdlib.h</code>. Sa principale
+  fonction est de modifier la taille d’un bloc mémoire alloué dynamiquement.
+</p>
+
+<p>
+  Le prototype de la fonction est simple. Elle prend l’adresse de la zone à
+  modifier et la nouvelle taille à lui donner. Malheureusement, je vois encore
+  trop souvent à mon goût une mauvaise utilisation de cette fonction (en
+  particulier dans la gestion des erreurs, ce qui provoque des fuites de
+  mémoire).
+</p>
+
+<h2>Ce qu’il ne faut pas faire (mais que je vois souvent…)</h2>
+
+<p>
+  Voilà un exemple de mauvaise utilisation de <code>realloc</code> (code trouvé
+  dans un tuto’ quelconque sur Internet).
+</p>
+
+    <figure class="code">
+      <figcaption>Un mauvaise utilisation de realloc()</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+</pre></td><td class="rouge-code"><pre><span class="n">tab</span> <span class="o">=</span> <span class="n">realloc</span><span class="p">(</span><span class="n">tab</span><span class="p">,</span> <span class="mi">6000</span><span class="o">*</span><span class="nf">sizeof</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">));</span>
+<span class="k">if</span><span class="p">(</span><span class="n">tab</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Utilisation de l’espace mémoire ré-alloué</span>
+    <span class="c1">// ...</span>
+    <span class="c1">// /!\ Penser à libérer la mémoire !!!</span>
+<span class="p">}</span>
+<span class="k">else</span>
+<span class="p">{</span>
+    <span class="c1">// Echec de la ré-allocation mémoire</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Nan, mais il ne faut pas rigoler : j’ai vu des gars qui ont un niveau pas trop
+  mauvais en C qui pondent des conneries du genre…
+</p>
+
+<p>
+  Je crois que les gens qui produisent ce genre de code ne lisent pas le putain
+  de manuel avant d’utiliser une fonction. En effet, <code>man 3 realloc</code>
+  nous dit :
+</p>
+
+
+<blockquote>
+  <p>
+    […]
+    <br />
+    The realloc() function returns a pointer to the newly allocated memory,
+    which is suitably aligned for any kind of variable and may be different from
+    ptr, or NULL if the request fails. If size was equal to 0, either NULL or a
+    pointer suitable to be passed to free() is returned. If realloc() fails the
+    original block is left untouched; it is not freed or moved.
+    <br />
+    […]
+  </p>
+  <footer>
+    <strong>man 3 realloc</strong>
+    <cite>
+      <a href='https://linux.die.net/man/3/realloc'>https://linux.die.net/man/3/realloc</a>
+    </cite>
+  </footer>
+</blockquote>
+
+<p>
+  Donc si <code>realloc</code> se vautre, il renvoie <code>NULL</code> et là il
+  faut que les cadors du code crado m’expliquent comment ils libèrent leur bloc
+  mémoire maintenant qu’ils ont écrasé son adresse avec le retour
+  de <code>realloc</code>.
+</p>
+
+<h2>La bonne façon d’utiliser realloc()</h2>
+
+<p>
+  La solution est toute simple : passer par une variable intermédiaire pour
+  récupérer le retour de <code>realloc</code>. Voilà un exemple de code
+  (imparfait je le sais, je ne teste pas le risque d’<em>overflow</em> sur
+  <code>new_size</code> alors qu’il faudrait le faire).
+</p>
+
+    <figure class="code">
+      <figcaption>Utilisation correcte de realloc()</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+</pre></td><td class="rouge-code"><pre><span class="k">static</span> <span class="kt">char</span><span class="o">*</span> <span class="nf">enlarge_your_buffer</span><span class="p">(</span><span class="kt">char</span><span class="o">**</span> <span class="n">buff</span><span class="p">,</span> <span class="kt">size_t</span><span class="o">*</span> <span class="n">size</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">size_t</span> <span class="n">new_size</span> <span class="o">=</span> <span class="p">(</span><span class="kt">size_t</span><span class="p">)(</span><span class="o">*</span><span class="n">size</span> <span class="o">*</span> <span class="mi">1</span><span class="p">.</span><span class="mi">5</span><span class="p">);</span>
+    <span class="kt">char</span><span class="o">*</span>  <span class="n">tmp</span>      <span class="o">=</span> <span class="n">realloc</span><span class="p">(</span><span class="o">*</span><span class="n">buff</span><span class="p">,</span> <span class="n">new_size</span><span class="p">);</span>
+
+    <span class="k">if</span><span class="p">(</span><span class="n">tmp</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="o">*</span><span class="n">buff</span> <span class="o">=</span> <span class="n">tmp</span><span class="p">;</span>
+        <span class="o">*</span><span class="n">size</span> <span class="o">=</span> <span class="n">new_size</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">else</span>
+    <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"error realloc failed: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">ENOMEM</span><span class="p">));</span>
+        <span class="n">free</span><span class="p">(</span><span class="o">*</span><span class="n">buff</span><span class="p">);</span>
+        <span class="o">*</span><span class="n">buff</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="o">*</span><span class="n">buff</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  De cette manière on peut faire le traitement adapté en fonction du retour de
+  <code>realloc</code> : on libère la zone mémoire et on signale l’erreur en cas
+  d’échec, sinon on met le pointeur à jour.
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2011-02-26T00:00:00Z"
+            itemprop="datePublished">
+        2011-02-26
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#c" rel="tag">C</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

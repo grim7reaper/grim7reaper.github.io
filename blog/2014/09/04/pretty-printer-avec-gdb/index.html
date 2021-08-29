@@ -1,0 +1,584 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Pretty-printer avec GDB — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2014/09/04/pretty-printer-avec-gdb/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Pretty-printer avec GDB</h1>
+
+  <p>
+  Depuis la
+  version 7.0<sup id="fnref:1"><a href="#fn:1">1</a></sup> (sortie le
+  2009/10/06), GDB embarque un interpréteur Python cela qui permet d’utiliser
+  Python comme langage de scripting pour étendre les fonctionnalités de GDB.
+</p>
+
+<p>
+  Dans cet article je vais aborder la création de <em>pretty-printer</em> en
+  Python.
+</p>
+
+<h2>Le problème</h2>
+
+<p>
+  Comme un exemple vaut mieux qu’un long discours, je vais montrer ici un cas
+  pratique : l’affichage d’adresses IP.
+</p>
+
+<p>Les systèmes POSIX représentent les adresses via deux structures:</p>
+
+<ul>
+  <li>
+    <code>in_addr</code> pour les IPv4 : une structure qui doit contenir au
+    minimum un champ <code>s_addr</code> de type <code>in_addr_t</code> (qui est
+    équivalent à <code>uint32_t</code>).
+  </li>
+  <li>
+    <code>in6_addr</code> pour les IPv6 : une structure qui doit contenir au
+    minimum un champ <code>s6_addr</code> de type <code>uint8_t[16]</code>.
+  </li>
+</ul>
+
+<p>
+  Ces informations, parmi d’autres, sont disponibles
+  <a href="https://pubs.opengroup.org/onlinepubs/009695399/basedefs/netinet/in.h.html">ici</a>.
+</p>
+
+<p>
+  De par la définition de ces structures, si on veut les afficher dans GDB on
+  n’obtient quelque chose qui n’est pas très lisible pour un humain.
+</p>
+
+<p>Soit le programme suivant :</p>
+
+    <figure class="code">
+      <figcaption>exemple.c</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdlib.h&gt;
+</span>
+<span class="cp">#include &lt;arpa/inet.h&gt;
+</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">sockaddr_in</span>  <span class="n">ipv4</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">sockaddr_in6</span> <span class="n">ipv6</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">inet_pton</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span>  <span class="s">"82.66.107.250"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ipv4</span><span class="p">.</span><span class="n">sin_addr</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">EXIT_FAILURE</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">inet_pton</span><span class="p">(</span><span class="n">AF_INET6</span><span class="p">,</span> <span class="s">"2a01:e35:2426:bfa0:215:ff:fe42:7fd3"</span><span class="p">,</span>
+                  <span class="o">&amp;</span><span class="n">ipv6</span><span class="p">.</span><span class="n">sin6_addr</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">EXIT_FAILURE</span><span class="p">;</span>
+
+    <span class="k">return</span> <span class="n">EXIT_SUCCESS</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Si on lance GDB dessus en utilisant le fichier de commande suivant :</p>
+
+    <figure class="code">
+      <figcaption>command.gdb</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+</pre></td><td class="rouge-code"><pre>break example.c:17
+command
+silent
+print ipv4-&gt;sin_addr
+print ipv6-&gt;sin6_addr
+continue
+end
+
+run
+quit
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>On obtient :</p>
+
+    <figure class="code">
+      <figcaption>Sortie produite</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre>% gdb -q ./example --command=command.gdb 2&gt; /dev/null
+Reading symbols from ./example...done.
+Breakpoint 1 at 0x8065581: file example.c, line 17.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+$1 = {s_addr = 4201333330}
+$2 = {__in6_u = {__u6_addr8 = "*\001\016\065$&amp;\277\240\002\025\000\377\376B", &lt;incomplete sequence \323&gt;, __u6_addr16 = {298, 13582, 9764, 41151, 5378, 65280, 17150, 54143}, __u6_addr32 = {890110250, 2696881700, 4278195458, 3548332798}}}
+[Inferior 1 (process 2043) exited normally]
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Le moins que l’on puisse dire c’est que ce n’est pas
+  super <em>human-friendly</em> (<code>$1</code> étant l’IPv4 et <code>$2</code>
+  l’IPv6).
+</p>
+
+<h2>Les pretty-printers</h2>
+
+<p>
+  Nous allons créer un module python <code>my_pp</code>. Dans le
+  répertoire <em>my_pp</em>, nous aurons deux fichiers :
+</p>
+
+<ol>
+  <li>
+    <code>netinet.py</code> qui contiendra le code des <em>pretty-printers</em>.
+  </li>
+  <li>
+    <code>__init__.py</code> qui se chargera d’enregistrer
+    nos <em>pretty-printers</em> auprès de GDB.
+  </li>
+</ol>
+
+<p>
+  Commençons avec le premier fichier (j’ai omis les <em>docstrings</em> pour
+  raccourcir le code).
+</p>
+
+    <figure class="code">
+      <figcaption>netinet.py</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+</pre></td><td class="rouge-code"><pre><span class="kn">from</span> <span class="nn">struct</span> <span class="kn">import</span> <span class="n">pack</span>
+<span class="kn">from</span> <span class="nn">socket</span> <span class="kn">import</span> <span class="n">inet_ntop</span><span class="p">,</span> <span class="n">AF_INET</span><span class="p">,</span> <span class="n">AF_INET6</span>
+
+<span class="kn">from</span> <span class="nn">gdb</span> <span class="kn">import</span> <span class="n">lookup_type</span>
+
+<span class="k">class</span> <span class="nc">ipv4Printer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">):</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">addr</span> <span class="o">=</span> <span class="n">pack</span><span class="p">(</span><span class="s">'I'</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="s">'s_addr'</span><span class="p">]))</span>
+
+    <span class="k">def</span> <span class="nf">to_string</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span> <span class="bp">self</span><span class="p">.</span><span class="n">addr</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">ipv6Printer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">):</span>
+        <span class="c1"># IPv6 addresses have a size of 128 bits (== 16 octets).
+</span>        <span class="n">N</span> <span class="o">=</span> <span class="mi">16</span>
+        <span class="n">addr</span> <span class="o">=</span> <span class="n">val</span><span class="p">.</span><span class="n">cast</span><span class="p">(</span><span class="n">lookup_type</span><span class="p">(</span><span class="s">"uint8_t"</span><span class="p">).</span><span class="n">array</span><span class="p">(</span><span class="n">N</span><span class="p">))</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">addr</span> <span class="o">=</span> <span class="n">pack</span><span class="p">(</span><span class="s">'B'</span><span class="o">*</span><span class="n">N</span><span class="p">,</span> <span class="o">*</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">addr</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">)])</span>
+
+    <span class="k">def</span> <span class="nf">to_string</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET6</span><span class="p">,</span> <span class="bp">self</span><span class="p">.</span><span class="n">addr</span><span class="p">)</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Allons y étape par étape.</p>
+
+    <figure class="code">
+      <figcaption>Les imports</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="rouge-code"><pre><span class="kn">from</span> <span class="nn">struct</span> <span class="kn">import</span> <span class="n">pack</span>
+<span class="kn">from</span> <span class="nn">socket</span> <span class="kn">import</span> <span class="n">inet_ntop</span><span class="p">,</span> <span class="n">AF_INET</span><span class="p">,</span> <span class="n">AF_INET6</span>
+
+<span class="kn">from</span> <span class="nn">gdb</span> <span class="kn">import</span> <span class="n">lookup_type</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Les adresses IP étant stockées sous forme binaire, on importe le
+  module <code>struct</code> pour pouvoir les manipuler. Le
+  module <code>socket</code> va nous servir à les convertir en chaîne de
+  caractères<sup id="fnref:2"><a href="#fn:2">2</a></sup>. Enfin, on importe le
+  module <code>gdb</code>.
+</p>
+
+    <figure class="code">
+      <figcaption>Pretty-printer pour l’IPv4</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+</pre></td><td class="rouge-code"><pre><span class="k">class</span> <span class="nc">ipv4Printer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">):</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">addr</span> <span class="o">=</span> <span class="n">pack</span><span class="p">(</span><span class="s">'I'</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="s">'s_addr'</span><span class="p">]))</span>
+
+    <span class="k">def</span> <span class="nf">to_string</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span> <span class="bp">self</span><span class="p">.</span><span class="n">addr</span><span class="p">)</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Lorsque GDB va instancier un objet <code>ipv4Printer</code>, il va lui passer
+  en argument une structure de type <code>in_addr</code>. Comme dit
+  précédemment, cette structure contient un champ <code>s_addr</code> qui est
+  un <code>uint32_t</code>. Notre méthode d’initialisation se contente donc
+  d’extraire ce champ dans le membre <code>addr</code> de notre objet.
+</p>
+
+<p>
+  Ensuite, la méthode <code>to_string</code> est appelée par GDB à chaque fois
+  qu’il doit afficher un objet de type <code>in_addr</code>. Cette méthode
+  renvoie la chaîne de caractère représentant l’adresse IP contenue
+  dans <code>addr</code>.
+</p>
+
+    <figure class="code">
+      <figcaption>Pretty-printer pour l’IPv6</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="k">class</span> <span class="nc">ipv6Printer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">):</span>
+        <span class="c1"># IPv6 addresses have a size of 128 bits (== 16 octets).
+</span>        <span class="n">N</span> <span class="o">=</span> <span class="mi">16</span>
+        <span class="n">addr</span> <span class="o">=</span> <span class="n">val</span><span class="p">.</span><span class="n">cast</span><span class="p">(</span><span class="n">lookup_type</span><span class="p">(</span><span class="s">"uint8_t"</span><span class="p">).</span><span class="n">array</span><span class="p">(</span><span class="n">N</span><span class="p">))</span>
+        <span class="bp">self</span><span class="p">.</span><span class="n">addr</span> <span class="o">=</span> <span class="n">pack</span><span class="p">(</span><span class="s">'B'</span><span class="o">*</span><span class="n">N</span><span class="p">,</span> <span class="o">*</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">addr</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">)])</span>
+
+    <span class="k">def</span> <span class="nf">to_string</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET6</span><span class="p">,</span> <span class="bp">self</span><span class="p">.</span><span class="n">addr</span><span class="p">)</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  En théorie; la version IPv6 devrait être aussi simple que la version IPv4. En
+  théorie… En pratique c’est malheureusement plus compliqué.
+</p>
+
+<p>
+  En effet, si POSIX requiert que la structure <code>in6_addr_t</code> possède
+  un champ nommé <code>s6_addr</code> le fait est que, la plupart du temps, ce
+  membre n’existe pas vraiment: c’est un symbole de préprocesseur. En tant que
+  tel, il n’est pas accessible dans GDB (sauf si on utilise certaines options de
+  compilation bien spécifiques telle que <code>-g3</code>
+  et <code>-gdwarf-2</code> par exemple). Pis encore, Windows ne définit pas ce
+  membre du tout (Windows ne cherche pas vraiment à être conforme POSIX).
+</p>
+
+<p>
+  La solution que j’ai trouvée est de traiter la structure <code>in6_addr</code>
+  comme un tableau de 16 octets. Cela fonctionne et me semble relativement
+  portable étant donné que la structure <code>in6_addr</code> est définie comme
+  une union dont l’un des champs est effectivement un <code>uint8_t[16]</code>
+  au moins sur les systèmes d’exploitation suivant :
+</p>
+
+<ul>
+  <li>
+    <a href="https://github.com/torvalds/linux/blob/master/include/uapi/linux/in6.h">Linux</a>
+  </li>
+  <li>
+    <a href="https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/sys/netinet6/in6.h">DragonFlyBSD</a>
+  </li>
+  <li>
+    <a href="https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms738560(v=vs.85)?redirectedfrom=MSDN">Windows</a>
+  </li>
+  <li>
+    <a href="https://svnweb.freebsd.org/base/stable/9/sys/netinet6/in6.h?revision=244524&view=markup">FreeBSD</a>
+  </li>
+  <li>
+    <a href="https://web.archive.org/web/20160327001511/http://cvsweb.netbsd.org/bsdweb.cgi/src/sys/netinet6/in6.h?rev=1.78&content-type=text/x-cvsweb-markup&only_with_tag=MAIN">NetBSD</a>
+  </li>
+</ul>
+
+<p>
+  La méthode <code>__init__</code> de notre objet va donc <em>caster</em> la
+  valeur puis la stocker dans l’attribut <code>addr</code>. Au niveau de la
+  méthode <code>to_string</code>, c’est quasiment la même chose que
+  pour <code>ipv4Printer</code> (on remplace seulement <code>AF_INET</code>
+  par <code>AF_INET6</code>).
+</p>
+
+<p>
+    Enfin, l’enregistrement de nos deux classes se fait dans le fichier
+    <code>__init__.py</code>.
+</p>
+
+    <figure class="code">
+      <figcaption>__init__.py</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre><span class="kn">from</span> <span class="nn">gdb.printing</span> <span class="kn">import</span> <span class="n">RegexpCollectionPrettyPrinter</span>
+<span class="kn">import</span> <span class="nn">netinet</span>
+
+<span class="k">def</span> <span class="nf">netinet_pp</span><span class="p">():</span>
+    <span class="n">pp</span> <span class="o">=</span> <span class="n">RegexpCollectionPrettyPrinter</span><span class="p">(</span><span class="s">"netinet"</span><span class="p">)</span>
+    <span class="n">pp</span><span class="p">.</span><span class="n">add_printer</span><span class="p">(</span><span class="s">'in_addr'</span><span class="p">,</span>  <span class="s">'^in_addr$'</span><span class="p">,</span>  <span class="n">netinet</span><span class="p">.</span><span class="n">ipv4Printer</span><span class="p">)</span>
+    <span class="n">pp</span><span class="p">.</span><span class="n">add_printer</span><span class="p">(</span><span class="s">'in6_addr'</span><span class="p">,</span> <span class="s">'^in6_addr$'</span><span class="p">,</span> <span class="n">netinet</span><span class="p">.</span><span class="n">ipv6Printer</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pp</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  On commence par importer le module <code>gdb.printing</code>, puis
+  nos <em>pretty-printers</em>. L’enregistrement se fait via un
+  objet <code>RegexpCollectionPrettyPrinter</code> (via lequel on peut donner un
+  nom à notre groupe de <em>pretty-printers</em>) dans lequel nous ajoutons
+  nos <em>pretty-printers</em>. Lors de l’ajout, on donne un nom, une expression
+  rationnelle qui va définir les noms des types que nous pouvons afficher, puis
+  la classe du <em>pretty-printer</em>.
+</p>
+
+<p>Maintenant que le code est fait, voyons comment utiliser tout ça.</p>
+
+<h2>La mise en œuvre</h2>
+
+<p>
+  La mise en œuvre est très simple, elle peut se faire via le
+  fichier <em>.gdbinit</em>. Il suffit d’y ajouter ces lignes :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+</pre></td><td class="rouge-code"><pre># Python
+python
+
+from sys import path
+from gdb.printing import register_pretty_printer
+
+path.insert(0, '/chemin/vers/répertoire/contenant/my_pp')
+
+import my_pp
+register_pretty_printer(gdb.current_objfile(), my_pp.netinet_pp())
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Je pense que ça se passe de commentaire.</p>
+
+<h2>Le résultat</h2>
+
+<p>Et maintenant, si on lance GDB sur notre exemple on obtient :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% gdb -q ./example --command=command.gdb 2&gt; /dev/null
+Reading symbols from ./example...done.
+Breakpoint 1 at 0x8065581: file example.c, line 17.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+$1 = 82.66.107.250
+$2 = 2a01:e35:2426:bfa0:215:ff:fe42:7fd3
+[Inferior 1 (process 2424) exited normally]
+</pre>
+      </div>
+    </figure>
+
+
+<p>Ce qui est, il faut l’admettre, bien plus lisible.</p>
+
+<p>
+  Pour conclure, je mentionnerai que la commande <code>info
+  pretty-printer</code> permet d’afficher la liste des <em>pretty-printers</em>
+  actuellement chargé dans GDB. Il est également possible d’utiliser l’affichage
+  « brut » de GDB, sans passer par un <em>pretty-printer</em> (même s’il en
+  existe un pour le type) en utilisant le modificateur <code>/r</code> de la
+  commande <code>print</code> (par exemple <code>print /r toto</code>).
+</p>
+
+<p>
+  Voilà, ça sera tout pour cette introduction aux <em>pretty-printers</em>. La
+  documentation officielle est
+  <a href="https://sourceware.org/gdb/current/onlinedocs/gdb/Pretty-Printing.html">ici</a>
+  pour ceux qui veulent approfondir.
+</p>
+
+<div class="footnotes">
+  <hr class="weak-hr" />
+  <ol>
+    <li id="fn:1">
+      <p>
+        je vous conseille d’utiliser au moins GDB 7.8, les versions antérieures
+        ayant un
+        <a href="https://web.archive.org/web/20160418212343/http://comments.gmane.org/gmane.comp.gdb.patches/94851">bogue</a>
+        avec les types définis via <code>typedef</code>.<a href="#fnref:1">↩</a>
+      </p>
+    </li>
+    <li id="fn:2">
+      <p>
+        depuis Python 3.3, on utilise plutôt le module
+        <a href="https://docs.python.org/dev/library/ipaddress.html">ipaddress</a>
+        <a href="#fnref:2">↩</a>
+      </p>
+    </li>
+  </ol>
+</div>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2014-09-04T00:00:00Z"
+            itemprop="datePublished">
+        2014-09-04
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#debugging" rel="tag">Debugging</a> <a href="/blog/tags/#python" rel="tag">Python</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

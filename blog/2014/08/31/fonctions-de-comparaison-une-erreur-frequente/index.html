@@ -1,0 +1,383 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Fonctions de comparaison : une erreur fréquente — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2014/08/31/fonctions-de-comparaison-une-erreur-frequente/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Fonctions de comparaison : une erreur fréquente</h1>
+
+  <h2>Contexte</h2>
+
+<p>
+  Premièrement, qu’est-ce que j’entends par « fonction de comparaison » ?
+  <br />
+  Je parle des fonctions qui prennent deux arguments en entrée et qui renvoie :
+</p>
+
+<ul>
+  <li>
+    un nombre positif si le premier argument est <strong>strictement
+    supérieur</strong> au second.
+  </li>
+  <li>
+    0 si les deux arguments sont égaux.
+  </li>
+  <li>
+    un nombre négatif si le premier argument est <strong>strictement
+    inférieur</strong> au second.
+  </li>
+</ul>
+
+<p>
+  Ce genre de fonction est utilisée pour ordonner des éléments (ordre total), et
+  elles sont donc naturellement utilisée par certaines fonctions de tri telles
+  que <a href="https://man.cx/qsort">qsort</a>.
+</p>
+
+<p>
+  Maintenant, pourquoi est-ce que je parle d’une erreur répandue ?
+  <br />
+  Et bien parce qu’en tapant « qsort » ou « qsort example » dans un moteur de
+  recherche, je tombe sur ça (il y a aussi des versions correctes, je vous
+  rassure) :
+</p>
+
+<ul>
+  <li>
+    <a href="http://www.cplusplus.com/reference/cstdlib/qsort/">cplusplus.com</a>
+  </li>
+  <li>
+    <a href="http://www.bien-programmer.fr/qsort.htm">bien-programmer.fr</a>
+  </li>
+  <li>
+    <a href="https://www.tutorialspoint.com/c_standard_library/c_function_qsort.htm">tutorialspoint.com</a>
+  </li>
+  <li>
+    <a href="http://anyexample.com/programming/c/qsort__sorting_array_of_strings__integers_and_structs.xml">anyexample.com</a>
+  </li>
+</ul>
+
+
+<h2>Problème</h2>
+
+<p>
+  Alors, quel est le problème ?
+  <br />
+  Prenons l’exemple donné sur le site
+  <a href="http://www.cplusplus.com/reference/cstdlib/qsort/">cplusplus.com</a> :
+</p>
+
+    <figure class="code">
+      <figcaption>Exemple</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+</pre></td><td class="rouge-code"><pre><span class="cm">/* qsort example */</span>
+<span class="cp">#include &lt;stdio.h&gt;      </span><span class="cm">/* printf */</span><span class="cp">
+#include &lt;stdlib.h&gt;     </span><span class="cm">/* qsort */</span><span class="cp">
+</span>
+<span class="kt">int</span> <span class="n">values</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">90</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">25</span> <span class="p">};</span>
+
+<span class="kt">int</span> <span class="nf">compare</span> <span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span> <span class="n">b</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="k">return</span> <span class="p">(</span> <span class="o">*</span><span class="p">(</span><span class="kt">int</span><span class="o">*</span><span class="p">)</span><span class="n">a</span> <span class="o">-</span> <span class="o">*</span><span class="p">(</span><span class="kt">int</span><span class="o">*</span><span class="p">)</span><span class="n">b</span> <span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span> <span class="p">()</span>
+<span class="p">{</span>
+  <span class="kt">int</span> <span class="n">n</span><span class="p">;</span>
+  <span class="n">qsort</span> <span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">),</span> <span class="n">compare</span><span class="p">);</span>
+  <span class="k">for</span> <span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">n</span><span class="o">&lt;</span><span class="mi">6</span><span class="p">;</span> <span class="n">n</span><span class="o">++</span><span class="p">)</span>
+     <span class="n">printf</span> <span class="p">(</span><span class="s">"%d "</span><span class="p">,</span><span class="n">values</span><span class="p">[</span><span class="n">n</span><span class="p">]);</span>
+  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Si on teste cet exemple, on obtient bien le résultat attendu :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>10 20 25 40 90 100
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Bien, et si maintenant on
+  utilise<sup id="fnref:1"><a href="#fn:1">1</a></sup> :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre><span class="kt">int</span> <span class="n">values</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span> <span class="mi">40</span><span class="p">,</span> <span class="n">INT_MIN</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="n">INT_MAX</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="n">INT_MIN</span> <span class="o">+</span> <span class="mi">42</span> <span class="p">};</span>
+</pre>
+      </div>
+    </figure>
+
+
+<p>Alors là, rien ne va plus ! En sortie on obtient :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>40 100 2147483647 -2147483648 -2147483606 20
+</pre>
+      </div>
+    </figure>
+
+
+<p>Ce qui ne correspond pas du tout à un tableau trié par ordre croissant.</p>
+
+<h2>Explication</h2>
+
+<p>Le souci vient de la fonction de comparaison :</p>
+
+    <figure class="code">
+      <figcaption>Une mauvaise fonction de comparaison</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="rouge-code"><pre><span class="kt">int</span> <span class="nf">compare</span> <span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span> <span class="n">b</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="k">return</span> <span class="p">(</span> <span class="o">*</span><span class="p">(</span><span class="kt">int</span><span class="o">*</span><span class="p">)</span><span class="n">a</span> <span class="o">-</span> <span class="o">*</span><span class="p">(</span><span class="kt">int</span><span class="o">*</span><span class="p">)</span><span class="n">b</span> <span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  L’idée derrière cette fonction est que comme on doit renvoyer un nombre
+  positif si <code>a > b</code>, négatif is <code>a > b</code> et 0
+  si <code>a = b</code> alors autant renvoyer la différence.
+</p>
+
+<p>
+  En théorie, ça fonctionne. En pratique, les nombres représentables dans
+  un <code>int</code> sont bornés et il y a donc risque d’<em>overflow</em>
+  lorsque l’on approche les valeurs limites. Et en effet, l’opération
+  <code>a - b</code> peut produire un résultat non représentable dans
+  un <code>int</code>.
+</p>
+
+<p>
+  À toutes fins utiles, je rappelle que les <em>overflow</em> d’entiers signés
+  en C sont un comportement non-défini. Cela vient en partie du fait que le
+  standard du C n’impose rien sur la représentation des entiers signés (signe et
+  magnitude, complément à un ou complément à deux) et ne veut donc pas dicter le
+  comportement attendu pour ce genre de situation.
+</p>
+
+<h2>Solution</h2>
+
+<p>
+  La solution est très simple. Étant donné que l’on souhaite faire une fonction
+  de comparaison il suffit d’utiliser les opérateurs de comparaison afin
+  d’éviter tout problème d’<em>overflow</em> :
+</p>
+
+    <figure class="code">
+      <figcaption>Une fonction de comparaison sûre</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+</pre></td><td class="rouge-code"><pre><span class="kt">int</span> <span class="nf">compare</span> <span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span> <span class="n">b</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">const</span> <span class="kt">int</span><span class="o">*</span> <span class="n">left</span> <span class="o">=</span> <span class="n">a</span><span class="p">;</span>
+    <span class="k">const</span> <span class="kt">int</span><span class="o">*</span> <span class="n">right</span> <span class="o">=</span> <span class="n">b</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">left</span> <span class="o">&gt;</span> <span class="o">*</span><span class="n">right</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">left</span> <span class="o">&lt;</span> <span class="o">*</span><span class="n">right</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="k">else</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Et pour ceux qui trouvent l’alternative précédente trop verbeuse, il est
+  toujours possible l’utiliser l’idiome suivant :
+</p>
+
+    <figure class="code">
+      <figcaption>Une fonction de comparaison sûre et courte</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+</pre></td><td class="rouge-code"><pre><span class="kt">int</span> <span class="nf">compare</span> <span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span> <span class="n">b</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">const</span> <span class="kt">int</span><span class="o">*</span> <span class="n">left</span> <span class="o">=</span> <span class="n">a</span><span class="p">;</span>
+    <span class="k">const</span> <span class="kt">int</span><span class="o">*</span> <span class="n">right</span> <span class="o">=</span> <span class="n">b</span><span class="p">;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="o">*</span><span class="n">left</span> <span class="o">&gt;</span> <span class="o">*</span><span class="n">right</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="o">*</span><span class="n">left</span> <span class="o">&lt;</span> <span class="o">*</span><span class="n">right</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Cette version se base sur le fait que les opérateurs <code>></code>
+  et <code>&lt;</code> renvoie 0 ou 1, ce qui est garanti par le standard
+  (Cf. <em>ISO/IEC 9899:TC3</em>, 6.5.8 Relational operators §6, page 86) :
+</p>
+
+<blockquote>
+  <p>
+    […]
+    <br />
+    Each of the operators &lt; (less than), > (greater than), &lt;= (less than or
+    equal to), and >= (greater than or equal to) shall yield 1 if the specified
+    relation is true and 0 if it is false.)
+    <br />
+    The result has type int.
+    <br />
+    […]
+  </p>
+  <footer>
+    <strong>ISO/IEC 9899:TC3</strong>
+    <cite>
+      <a href='http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1256.pdf'>www.open-std.org/jtc1/sc22/wg14/www/docs/n1256</a>
+    </cite>
+  </footer>
+</blockquote>
+
+<p>
+  Cette version est donc absolument portable et devrait même fonctionner sur un
+  <a href="https://en.wikipedia.org/wiki/User:CompuHacker/CHDS9000">DS9K</a> :P
+</p>
+
+<div class="footnotes">
+  <hr class="weak-hr" />
+  <ol>
+    <li id="fn:1">
+      <p>
+        on n’oubliera pas d’ajouter
+        <code>#include &lt;limits.h&gt;</code><a href="#fnref:1">↩</a>
+      </p>
+    </li>
+  </ol>
+</div>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2014-08-31T00:00:00Z"
+            itemprop="datePublished">
+        2014-08-31
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#c" rel="tag">C</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

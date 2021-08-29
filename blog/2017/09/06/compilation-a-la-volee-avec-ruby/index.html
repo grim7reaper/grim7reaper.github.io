@@ -1,0 +1,1291 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Compilation à la volée avec Ruby — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2017/09/06/compilation-a-la-volee-avec-ruby/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Compilation à la volée avec Ruby</h1>
+
+  <p>
+  Récemment, je suis tombé sur cette série d’articles d’Eli Bendersky sur la
+  compilation à la volée (<strong>JIT compilation</strong> : <em>Just-In-Time
+  compilation</em>) :
+</p>
+
+<ul>
+  <li>
+    <a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-1-an-interpreter/">Adventures in JIT compilation: Part 1 - an interpreter</a>
+  </li>
+  <li>
+    <a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-2-an-x64-jit/">Adventures in JIT compilation: Part 2 - an x64 JIT</a>
+  </li>
+  <li>
+    <a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-3-llvm/">Adventures in JIT compilation: Part 3 - LLVM</a>
+  </li>
+  <li>
+    <a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-4-in-python/">Adventures in JIT compilation: Part 4 - in Python</a>
+  </li>
+</ul>
+
+<p>
+  Eli utilise le C++ pour les trois premières parties, mais dans la quatrième il
+  montre comment faire de la compilation à la volée en Python.
+</p>
+
+<p>
+  En lisant ça, je me suis demandé « Comment faire l’équivalent en Ruby ? ». Et
+  bien c’est ce que nous allons voir !
+</p>
+
+<p>
+  <em>
+    Pour des raisons de simplicité et concision, les exemples de codes de cet
+    article ne sont pas portable (limité à Linux/x86_64). Cependant, la démarche
+    présentée est applicable sur d’autres OS/architecture.
+  </em>
+</p>
+
+<h2>Comment exécuter du code compilé à la volée en Ruby</h2>
+
+<p>Les étapes pour exécuter du code compilé à la volée sont les suivantes :</p>
+
+<ol>
+  <li>
+    Allouer de la mémoire pour y placer le code à exécuter.
+  </li>
+  <li>
+    Créer une fonction à partir de l’adresse de la zone mémoire contenant le
+    code.
+  </li>
+  <li>
+    Utiliser la fonction autant que l’on veut.
+  </li>
+  <li>
+    Libérer la mémoire utilisée.
+  </li>
+</ol>
+
+<p>
+  Étant donné que nous allons devoir faire de la programmation relativement bas
+  niveau (allocation mémoire entre autre), nous allons nous reposer sur
+  l’excellent module <a href="https://github.com/ffi/ffi">ffi</a> (dont j’ai
+  déjà eu l’occasion de parler
+  <a href="/blog/2013/09/14/ffi-avec-ruby/">ici</a>).
+</p>
+
+<p>
+  En première approche pour l’étape 1 on pourrait penser à
+  <code>FFI::MemoryPointer.new</code> mais il y a de <strong>très</strong>
+  fortes chances pour que cela se termine en <em>Segmentation Fault</em> (ou
+  équivalent).
+</p>
+
+<p>
+  En effet, pour des raisons de sécurité, la mémoire est généralement allouée
+  soit en « lecture/écriture » (<strong>RW</strong> : <em>read/write</em>), soit
+  en « lecture/exécution » (<strong>RX</strong> :
+  <em>read/execute</em>)<sup id="fnref:1"><a href="#fn:1">1</a></sup>.
+  Et comme, de manière générale, les fonctions d’allocation (<code>malloc</code>
+  & <em>cie</em> en C, <code>FFI::MemoryPointer.new</code> en Ruby, …) renvoient
+  de la mémoire <strong>RW</strong> nous ne pourrons pas les utiliser pour
+  allouer la mémoire où nous allons placer notre code.
+</p>
+
+<p>
+  Heureusement, il existe un appel système qui nous permet de spécifier les
+  droits d’une zone mémoire lors de son allocation : <code>mmap</code>. Cette
+  fonction est extrêmement pratique et a de nombreux cas d’usages, mais dans le
+  cas présent nous allons en avoir une utilisation assez simple :
+</p>
+
+<ol>
+  <li>
+    Allouer via <code>mmap</code> une zone mémoire de taille suffisante pour
+    recevoir le code (cette zone sera allouée en <strong>RW</strong>).
+  </li>
+  <li>
+    Stocker le code dans cette zone mémoire.
+  </li>
+  <li>
+    Changer les permissions de la zone mémoire via <code>mprotect</code> pour la
+    passer en <strong>RX</strong>.
+  </li>
+</ol>
+
+
+<p>
+  Nous pourrions directement allouer la mémoire en <strong>RWX</strong> (et
+  ainsi éviter d’avoir à appeler <code>mprotect</code>) mais ce n’est pas une
+  bonne pratique (du point de vue sécurité) d’avoir les droits en
+  écriture <strong>ET</strong> en exécution en même temps sur une même zone
+  mémoire.
+</p>
+
+<h3>Wrapper mmap pour Ruby</h3>
+
+<p>
+  Étant donné que <code>mmap</code> & <em>cie</em> ne sont pas disponibles de
+  base en Ruby, contrairement
+  à <a href="https://docs.python.org/3.6/library/mmap.html">Python</a>, nous
+  allons faire un petit wrapper
+  nous-même<sup id="fnref:2"><a href="#fn:2">2</a></sup>. Ce wrapper ne sera pas
+  exposé publiquement, c’est un détail d’implémentation, et sera manipulé via
+  une classe qui représente une fonction compilée à la
+  volée : <code>JitFunction</code>.
+</p>
+
+<p>Mais d’abord, voyons le wrapper en question.</p>
+
+    <figure class="code">
+      <figcaption>Wrapper minimaliste autour de mmap & cie</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+</pre></td><td class="rouge-code"><pre><span class="nb">require</span> <span class="s1">'ffi'</span>
+
+<span class="k">class</span> <span class="nc">JitFunction</span>
+
+  <span class="p">[</span><span class="err">…</span><span class="p">]</span>
+
+  <span class="k">module</span> <span class="nn">Internal</span>
+    <span class="kp">extend</span> <span class="no">FFI</span><span class="o">::</span><span class="no">Library</span>
+    <span class="n">ffi_lib</span> <span class="no">FFI</span><span class="o">::</span><span class="no">Library</span><span class="o">::</span><span class="no">LIBC</span>
+
+    <span class="n">attach_function</span> <span class="s1">'mmap'</span><span class="p">,</span>     <span class="sx">%i[pointer size_t int int int off_t]</span><span class="p">,</span> <span class="ss">:pointer</span>
+    <span class="n">attach_function</span> <span class="s1">'mprotect'</span><span class="p">,</span> <span class="sx">%i[pointer size_t int]</span><span class="p">,</span> <span class="ss">:int</span>
+    <span class="n">attach_function</span> <span class="s1">'munmap'</span><span class="p">,</span>   <span class="sx">%i[pointer size_t]</span><span class="p">,</span> <span class="ss">:int</span>
+
+    <span class="no">PROT_NONE</span>  <span class="o">=</span> <span class="mh">0x0</span> <span class="c1"># Data cannot be accessed.</span>
+    <span class="no">PROT_READ</span>  <span class="o">=</span> <span class="mh">0x1</span> <span class="c1"># Data can be read.</span>
+    <span class="no">PROT_WRITE</span> <span class="o">=</span> <span class="mh">0x2</span> <span class="c1"># Data can be written.</span>
+    <span class="no">PROT_EXEC</span>  <span class="o">=</span> <span class="mh">0x4</span> <span class="c1"># Data can be executed.</span>
+
+    <span class="no">PROT_RW</span> <span class="o">=</span> <span class="no">PROT_READ</span> <span class="o">|</span> <span class="no">PROT_WRITE</span>
+    <span class="no">PROT_RX</span> <span class="o">=</span> <span class="no">PROT_READ</span> <span class="o">|</span> <span class="no">PROT_EXEC</span>
+
+    <span class="no">MAP_SHARED</span>    <span class="o">=</span> <span class="mh">0x1</span>   <span class="c1"># Share changes.</span>
+    <span class="no">MAP_PRIVATE</span>   <span class="o">=</span> <span class="mh">0x2</span>   <span class="c1"># Changes are private.</span>
+    <span class="no">MAP_ANONYMOUS</span> <span class="o">=</span> <span class="mh">0x20</span>  <span class="c1"># Don't use a file.</span>
+
+    <span class="no">MAP_FAILED</span> <span class="o">=</span> <span class="no">FFI</span><span class="o">::</span><span class="no">Pointer</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="ss">:void</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+  <span class="k">end</span>
+  <span class="n">private_constant</span> <span class="ss">:Internal</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Rien de bien compliqué : on déclare les trois fonctions que nous allons
+  utiliser (<code>mmap</code> pour allouer la mémoire, <code>mprotect</code>
+  pour changer les permissions et <code>munmap</code> pour libérer la mémoire)
+  et les constantes dont nous allons avoir besoin (il existe d’autres
+  constantes, vous pouvez consulter <code>man 2 mmap</code> pour la liste
+  complète).
+</p>
+
+<p>
+  <strong>Attention</strong> : ce wrapper n’est pas portable (il ne fonctionnera
+  pas pour Windows, sur d’autres UNIX les valeurs des constantes peuvent être
+  différentes, …).
+</p>
+
+<h3>La classe JitFunction</h3>
+
+<p>
+  Voyons maintenant la classe qui va nous permettre de créer et d’exécuter des
+  fonctions compilées à la volée.
+</p>
+
+    <figure class="code">
+      <figcaption>Implémentation de la classe JitFunction</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+</pre></td><td class="rouge-code"><pre><span class="nb">require</span> <span class="s1">'ffi'</span>
+
+<span class="k">class</span> <span class="nc">JitFunction</span>
+  <span class="k">def</span> <span class="nf">initialize</span><span class="p">(</span><span class="n">ret</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
+    <span class="vi">@size</span> <span class="o">=</span> <span class="n">code</span><span class="p">.</span><span class="nf">bytesize</span>
+    <span class="vi">@address</span> <span class="o">=</span> <span class="no">Internal</span><span class="p">.</span><span class="nf">mmap</span><span class="p">(</span><span class="kp">nil</span><span class="p">,</span> <span class="vi">@size</span><span class="p">,</span> <span class="no">Internal</span><span class="o">::</span><span class="no">PROT_RW</span><span class="p">,</span>
+                             <span class="no">Internal</span><span class="o">::</span><span class="no">MAP_PRIVATE</span> <span class="o">|</span> <span class="no">Internal</span><span class="o">::</span><span class="no">MAP_ANONYMOUS</span><span class="p">,</span>
+                             <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="s1">'cannot map memory'</span> <span class="k">if</span> <span class="vi">@address</span> <span class="o">==</span> <span class="no">Internal</span><span class="o">::</span><span class="no">MAP_FAILED</span>
+    <span class="vi">@address</span><span class="p">.</span><span class="nf">put_string</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="no">Internal</span><span class="p">.</span><span class="nf">mprotect</span><span class="p">(</span><span class="vi">@address</span><span class="p">,</span> <span class="vi">@size</span><span class="p">,</span> <span class="no">Internal</span><span class="o">::</span><span class="no">PROT_RX</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="s2">"cannot change memory's permission"</span> <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="vi">@func</span> <span class="o">=</span> <span class="no">FFI</span><span class="o">::</span><span class="no">Function</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">ret</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="vi">@address</span><span class="p">,</span> <span class="ss">convention: :default</span><span class="p">)</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="nf">call</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+    <span class="vi">@func</span><span class="p">.</span><span class="nf">call</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="nf">free</span>
+    <span class="no">Internal</span><span class="p">.</span><span class="nf">munmap</span><span class="p">(</span><span class="vi">@address</span><span class="p">,</span> <span class="vi">@size</span><span class="p">)</span>
+  <span class="k">end</span>
+
+  <span class="k">module</span> <span class="nn">Internal</span>
+    <span class="p">[</span><span class="err">…</span><span class="p">]</span>
+  <span class="k">end</span>
+  <span class="n">private_constant</span> <span class="ss">:Internal</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  On peut voir que l’interface de la classe est composée de trois méthodes
+  publiques :
+</p>
+
+<ul>
+  <li>
+    <code>initialize</code> qui prend en argument le code de la fonction et qui
+    crée un objet <code>FFI::Function</code>.
+  </li>
+  <li>
+    <code>call</code> qui permet d’exécuter la fonction.
+  </li>
+  <li>
+    <code>free</code> qui libère la mémoire utilisée par le code de la fonction.
+  </li>
+</ul>
+
+<p>
+  Il n’y a pas grand chose à dire sur <code>call</code> (un simple wrapper
+  autour de la méthode <code>call</code> de l’objet <code>FFI::Function</code>)
+  ou <code>free</code> (un simple wrapper autour de <code>munmap</code>).
+</p>
+
+<p>En revanche, <code>initialize</code> mérite que l’on s’y attarde.</p>
+
+<ul>
+  <li>
+    La ligne 5 récupère la taille, en octet, du code de la fonction.
+  </li>
+  <li>
+    La ligne 6 alloue la mémoire pour le code via <code>mmap</code>. On remarque
+    que la mémoire est alloué en <strong>RW</strong> (comme l’indique le
+    paramètre <code>PROT_RW</code>). La mémoire allouée n’est pas accessible aux
+    autres processus (utilisation de <code>MAP_PRIVATE</code> au lieu
+    de <code>MAP_SHARED</code>) et n’est pas liée à un fichier sur le disque
+    (utilisation de <code>MAP_ANONYMOUS</code>).
+  </li>
+  <li>
+    La ligne 9 lève une exception si l’allocation a échouée
+    (<strong>Attention</strong> : en cas d’erreur <code>mmap</code> ne renvoie
+    pas <code>NULL</code> mais une valeur bien spécifique représentée
+    par
+    <code>MAP_FAILED</code><sup id="fnref:3"><a href="#fn:3">3</a></sup>).
+  </li>
+  <li>
+    La ligne 10 copie le code de la fonction dans la zone allouée.
+  </li>
+  <li>
+    Étant donné que nous n’allons plus modifier la mémoire, la ligne 11 change
+    les permissions de la zone mémoire de <strong>RW</strong>
+    en <strong>RX</strong> et la ligne 12 lève une exception en cas d’échec.
+  </li>
+  <li>
+    Finalement, la ligne 13 crée un objet <code>FFI::Function</code> en
+    précisant le type de retour, le type des arguments et l’adresse du code à
+    exécuter.
+  </li>
+</ul>
+
+<h3>Test</h3>
+
+<p>
+  Nous pouvons maintenant tester la classe <code>JitFunction</code> en reprenant
+  l’exemple utilisé par Eli dans son
+  <a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-4-in-python/">quatrième article</a> :
+  une fonction qui ajoute 4 à un entier passé en argument et retourne le résultat.
+</p>
+
+    <figure class="code">
+      <figcaption>Exemple d’utilisation de JitFunction</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="k">if</span> <span class="kp">__FILE__</span> <span class="o">==</span> <span class="vg">$PROGRAM_NAME</span>
+  <span class="n">code</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\x48\x89\xf8\x48\x83\xc0\x04\xc3</span><span class="s2">"</span>
+  <span class="n">func</span> <span class="o">=</span> <span class="no">JitFunction</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="ss">:long</span><span class="p">,</span> <span class="p">[</span><span class="ss">:long</span><span class="p">],</span> <span class="n">code</span><span class="p">)</span>
+  <span class="k">begin</span>
+    <span class="nb">puts</span> <span class="n">func</span><span class="p">.</span><span class="nf">call</span><span class="p">(</span><span class="o">-</span><span class="mi">100</span><span class="p">)</span>
+  <span class="k">ensure</span>
+    <span class="n">func</span><span class="p">.</span><span class="nf">free</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Lorsque l’on exécute ce script, <code>-96</code> s’affiche. Ça fonctionne \o/
+</p>
+
+<p>
+  Le code complet de <code>jit.rb</code> est disponible
+  <a href="/static/code/ruby-jit/jit.rb">ici</a>.
+</p>
+
+<h2>Exemple d’utilisation : Brainfuck</h2>
+
+<p>
+  Afin de montrer un exemple d’utilisation « réel » de la
+  classe <code>JitFunction</code>, nous allons développer un programme qui va
+  compiler à la volée un programme Brainfuck en assembleur x86_64 pour Linux
+  puis l’exécuter : <code>bf-jit.rb</code>.
+</p>
+
+<h3>Point d’entrée</h3>
+
+<p>Commençons par le commencement : la fonction <code>main</code>.</p>
+
+    <figure class="code">
+      <figcaption>Point d’entrée</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+</pre></td><td class="rouge-code"><pre><span class="nb">require</span> <span class="s1">'set'</span>
+
+<span class="c1"># Brainfuck's instruction set.</span>
+<span class="no">INSTRUCTION_SET</span> <span class="o">=</span> <span class="no">Set</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="s1">'[]&gt;&lt;+-.,'</span><span class="p">.</span><span class="nf">chars</span><span class="p">).</span><span class="nf">freeze</span>
+
+<span class="k">if</span> <span class="kp">__FILE__</span> <span class="o">==</span> <span class="vg">$PROGRAM_NAME</span>
+  <span class="nb">abort</span> <span class="s1">'Missing argument: expected filename'</span> <span class="k">if</span> <span class="no">ARGV</span><span class="p">.</span><span class="nf">empty?</span>
+  <span class="n">bf_code</span> <span class="o">=</span> <span class="no">File</span><span class="p">.</span><span class="nf">read</span><span class="p">(</span><span class="no">ARGV</span><span class="p">[</span><span class="mi">0</span><span class="p">]).</span><span class="nf">chars</span><span class="p">.</span><span class="nf">select!</span> <span class="p">{</span> <span class="o">|</span><span class="n">c</span><span class="o">|</span> <span class="no">INSTRUCTION_SET</span><span class="p">.</span><span class="nf">include?</span> <span class="n">c</span> <span class="p">}</span>
+  <span class="n">memory</span>  <span class="o">=</span> <span class="no">FFI</span><span class="o">::</span><span class="no">MemoryPointer</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="ss">:uchar</span><span class="p">,</span> <span class="mi">30_000</span><span class="p">)</span>
+  <span class="n">bf_prog</span> <span class="o">=</span> <span class="no">JitFunction</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="ss">:void</span><span class="p">,</span> <span class="p">[],</span> <span class="n">compile_bf</span><span class="p">(</span><span class="n">bf_code</span><span class="p">,</span> <span class="n">memory</span><span class="p">))</span>
+  <span class="k">begin</span>
+    <span class="n">bf_prog</span><span class="p">.</span><span class="nf">call</span>
+  <span class="k">ensure</span>
+    <span class="n">bf_prog</span><span class="p">.</span><span class="nf">free</span>
+    <span class="n">memory</span><span class="p">.</span><span class="nf">free</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<ul>
+  <li>
+    La ligne 7 vérifie que le script est bien appelé avec un argument (le nom du
+    fichier source Brainfuck).
+  </li>
+  <li>
+    La ligne 8 lit le contenu du fichier et ne garde que les caractères qui font
+    partie du jeu d’instructions Brainfuck.
+  </li>
+  <li>
+    La ligne 9 alloue la mémoire pour l’exécution du programme (pour rappel, un
+    programme Brainfuck s’attend à avoir au moins 30 000 octets de mémoire à
+    disposition).
+  </li>
+  <li>
+    La ligne 10 compile le code source et crée un
+    objet <code>JitFunction</code>. Étant donné que le programme Brainfuck
+    s’exécute sans interaction avec le reste du script on le représente par une
+    fonction sans argument et avec un type de retour <code>void</code>.
+  </li>
+  <li>
+    Finalement, la ligne 12 exécute la fonction et les lignes 14 et 15 libèrent
+    la mémoire allouée.
+  </li>
+</ul>
+
+<h3>La compilation</h3>
+
+<p>Pour rappel, les instructions du Brainfuck sont les suivantes :</p>
+
+<ul>
+  <li>
+    <code></code> : déplace le pointeur d’une case mémoire vers la
+    droite ;</li>
+  <li>
+    <code>&lt;</code> : déplace le pointeur d’une case mémoire vers la
+    gauche ;</li>
+  <li>
+    <code>+</code> : incrémente la valeur stockée dans la case mémoire
+    actuellement pointée ;
+  </li>
+  <li>
+    <code>-</code> : décrémente la valeur stockée dans la case mémoire
+    actuellement pointée ;
+  </li>
+  <li>
+    <code>.</code> : affiche le caractère ASCII correspondant à la valeur de la
+    case mémoire actuellement pointée ;
+  </li>
+  <li>
+    <code>,</code> : stocke la valeur ASCII du caractère lu dans la case mémoire
+    actuellement pointée ;
+  </li>
+  <li>
+    <code>[</code> : saute à l’instruction suivant le <code>]</code>
+    correspondant si la valeur de la case mémoire actuellement pointée est égale
+    à zéro ;
+  </li>
+  <li>
+    <code>]</code> : saute à l’instruction suivant le <code>[</code>
+    correspondant si la valeur de la case mémoire actuellement pointée est
+    différente de zéro.
+  </li>
+</ul>
+
+<p>
+  On voit que pour interpréter du code Brainfuck nous allons avoir besoin de
+  deux pointeurs :
+</p>
+
+<ol>
+  <li>
+    un pointeur sur la mémoire : c’est le pointeur utilisé par la plupart des
+    instructions (toutes sauf <code>[</code> et <code>]</code>).
+  </li>
+  <li>
+    un pointeur sur le code : c’est le pointeur qui permet de savoir quelle est
+    la prochaine instruction à exécuter (il est incrémenté automatiquement après
+    chaque instruction, sauf pour les instructions <code>[</code> et
+    <code>]</code> qui peuvent le modifier de manière conditionnelle).
+  </li>
+</ol>
+
+<p>
+  Dans le cadre d’un interpréteur, nous devons gérer ces deux pointeurs
+  nous-même. En revanche, dans le cas de la compilation à la volée, nous allons
+  générer du code machine et c’est le processeur qui va s’occuper de savoir
+  quelle est la prochaine instruction à exécuter : nous avons seulement besoin
+  de gérer le pointeur sur la mémoire. Pour représenter ce pointeur nous allons
+  utiliser un registre. Cependant, on ne peut pas utiliser n’importe quel
+  registre : il y a des conventions d’utilisation. En regardant la
+  section <em>Registers</em> de
+  <a href="https://web.archive.org/web/20200807161717/https://web.stanford.edu/class/archive/cs/cs107/cs107.1202/guide/x86-64.html">Guide to x86-64</a>
+  on voit que <code>r10</code> est un bon choix (sa valeur est sauvegardé par
+  l’appelant, on peut donc l’utiliser comme on le souhaite).
+</p>
+
+<p>
+  Avec ces informations en tête, nous pouvons esquisser le squelette de notre
+  fonction de compilation.
+</p>
+
+    <figure class="code">
+      <figcaption>Prologue et épilogue</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+</pre></td><td class="rouge-code"><pre><span class="k">def</span> <span class="nf">compile_bf</span><span class="p">(</span><span class="n">bf</span><span class="p">,</span> <span class="n">memory</span><span class="p">)</span>
+  <span class="c1"># movabs r10, @memory (in little-endian)</span>
+  <span class="n">asm</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\x49\xBA</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span> <span class="o">+</span> <span class="s2">"</span><span class="si">#{</span><span class="p">[</span><span class="n">memory</span><span class="p">.</span><span class="nf">address</span><span class="p">].</span><span class="nf">pack</span><span class="p">(</span><span class="s1">'Q&lt;'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+  <span class="n">bf</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">instruction</span><span class="o">|</span>
+    <span class="k">case</span> <span class="n">instruction</span>
+      <span class="p">[</span><span class="err">…</span><span class="p">]</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+  <span class="n">asm</span> <span class="o">&lt;&lt;</span> <span class="s2">"</span><span class="se">\xC3</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span> <span class="c1"># ret</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  On peut voir qu’il y a du code ajouté avant (le prologue) et après
+  (l’épilogue) les instructions générées à partir du code Brainfuck (qui vont
+  être produites dans le bloc <code>each</code>).
+</p>
+
+<p>
+  Dans le prologue, nous initialisons le registre <code>r10</code> avec
+  l’adresse de la mémoire allouée pour l’exécution du programme Brainfuck. Deux
+  remarques :
+</p>
+
+<ol>
+  <li>
+    les processeurs x86_64 étant <em>little-endian</em>, nous utilisons le
+    format <code>Q&lt;</code> pour écrire l’adresse comme un entier
+    64-bit <em>little-endian</em>.
+  </li>
+  <li>
+    on utilise la fonction <code>b</code> de la classe <code>String</code> pour
+    que notre chaîne de caractères soit traitées comme une suite d’octets (ce
+    qu’elle est) et non pas comme du texte encodé (en UTF-8 par exemple).
+  </li>
+</ol>
+
+<p>
+  Dans l’épilogue, nous ajoutons l’instruction <code>ret</code>. En effet, notre
+  programme Brainfuck étant compilé en une fonction, il ne faut pas oublier
+  l’instruction <code>ret</code> pour revenir dans le code appelant à la fin de
+  l’exécution.
+</p>
+
+<h4>Compilation des instructions « simples »</h4>
+
+<p>
+  Sur les huit instructions du Brainfuck, six peuvent être traduites directement
+  en assembleur, indépendamment du contexte. Les deux dernières (<code>[</code>
+  et <code>]</code>) demandent un peu plus d’effort et seront traitées dans la
+  section suivante.
+</p>
+
+<p>
+  En reprenant la description des instructions de la section précédente et
+  sachant que notre pointeur est stocké dans <code>r10</code>, nous avons les
+  correspondances suivantes :
+</p>
+
+<ul>
+  <li><code>></code> : <code>inc r10</code>.</li>
+  <li><code>&lt;</code> : <code>dec r10</code>.</li>
+  <li><code>+</code> : <code>addb [r10], 1</code></li>
+  <li><code>-</code> : <code>subb [r10], 1</code></li>
+</ul>
+
+<p>
+  Pour l’instruction <code>,</code> nous devons utiliser l’appel
+  système <code>read</code> et pour <code>.</code> nous devons utiliser l’appel
+  système <code>write</code>.
+</p>
+
+<p>
+  Pour faire un appel système en assembleur x86_64 sous Linux ce n’est pas très
+  difficile : il suffit de mettre des valeurs dans des registres, puis d’utiliser
+  l’instruction <code>syscall</code>. Pour savoir quelle valeur mettre dans quel
+  registre, on peut se référer à la page
+  <a href="http://blog.rchapman.org/posts/Linux_System_Call_Table_for_x86_64/">Linux System Call Table for x86 64</a>
+  par exemple.
+</p>
+
+<p>Cela nous donne donc</p>
+
+    <figure class="code">
+      <figcaption>Appel système à read</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre>mov rax, 0      # On veut appeler read.
+mov rdi, 0      # On lit sur stdin.
+mov rsi, r10    # On veut l’écrire sur la case mémoire actuellement pointée.
+mov rdx, 1      # On veut lire seulement 1 octet.
+syscall
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>et</p>
+
+    <figure class="code">
+      <figcaption>Appel système à write</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre>mov rax, 1      # On veut appeler write.
+mov rdi, 1      # On écrit sur stdout.
+mov rsi, r10    # On veut écrire la case mémoire actuellement pointée.
+mov rdx, 1      # On veut écrire seulement 1 octet.
+syscall
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Bon, nous avons maintenant l’équivalent en assembleur de nos instructions
+  Brainfuck. Cependant, ce n’est pas suffisant car nous devons générer du code
+  machine directement. Il nous faut donc savoir comment ces instructions sont
+  encodées. Il y a plusieurs façons de faire cela, pour ma part j’ai utilisé
+  <code>rasm2</code> qui est un utilitaire faisant partie
+  de <a href="https://www.radare.org/r/">radare2</a>.
+</p>
+
+    <figure class="code">
+      <figcaption>Utilisation de rasm2 pour encoder les instructions</figcaption>
+      <div class="highlight">
+        <pre>% rasm2 -b 64 -a x86.as 'inc r10'
+49ffc2
+% rasm2 -b 64 -a x86.as 'dec r10'
+49ffca
+rasm2 -b 64 -a x86.as 'subb [r10], 1'
+41802a01
+% rasm2 -b 64 -a x86.as 'addb [r10], 1'
+41800201
+
+% rasm2 -b 64 -a x86.as 'mov rax, 1'
+48c7c001000000
+% rasm2 -b 64 -a x86.as 'mov rdi, 1'
+48c7c701000000
+% rasm2 -b 64 -a x86.as 'mov rsi, r10'
+4c89d6
+% rasm2 -b 64 -a x86.as 'mov rdx, 1'
+48c7c201000000
+% rasm2 -b 64 -a x86.as 'syscall'
+0f05
+
+% rasm2 -b 64 -a x86.as 'mov rax, 0'
+48c7c000000000
+% rasm2 -b 64 -a x86.as 'mov rdi, 0'
+48c7c700000000
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  L’option <code>-b</code> indique la taille des registres et
+  l’option <code>-a</code> l’architecture (une liste complète est disponible via
+  l’option <code>-L</code>).
+</p>
+
+<p>On peut maintenant compiler à la volée les instructions « simples ».</p>
+
+    <figure class="code">
+      <figcaption>Fonction de compilation à la volée (sans support des boucles)</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+</pre></td><td class="rouge-code"><pre><span class="c1"># Mapping f(Brainfuck instruction) = x86_64 assembly</span>
+<span class="no">INSTRUCTIONS_MAPPING</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s1">'&gt;'</span> <span class="o">=&gt;</span> <span class="s2">"</span><span class="se">\x49\xFF\xC2</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span><span class="p">,</span>
+  <span class="s1">'&lt;'</span> <span class="o">=&gt;</span> <span class="s2">"</span><span class="se">\x49\xFF\xCA</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span><span class="p">,</span>
+  <span class="s1">'+'</span> <span class="o">=&gt;</span> <span class="s2">"</span><span class="se">\x41\x80\x02\x01</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span><span class="p">,</span>
+  <span class="s1">'-'</span> <span class="o">=&gt;</span> <span class="s2">"</span><span class="se">\x41\x80\x2A\x01</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span><span class="p">,</span>
+  <span class="s1">'.'</span> <span class="o">=&gt;</span> <span class="p">[</span><span class="mh">0x48</span><span class="p">,</span> <span class="mh">0xC7</span><span class="p">,</span> <span class="mh">0xC0</span><span class="p">,</span> <span class="mh">0x01</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span>
+          <span class="mh">0x48</span><span class="p">,</span> <span class="mh">0xC7</span><span class="p">,</span> <span class="mh">0xC7</span><span class="p">,</span> <span class="mh">0x01</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span>
+          <span class="mh">0x4C</span><span class="p">,</span> <span class="mh">0x89</span><span class="p">,</span> <span class="mh">0xD6</span><span class="p">,</span>
+          <span class="mh">0x48</span><span class="p">,</span> <span class="mh">0xC7</span><span class="p">,</span> <span class="mh">0xC2</span><span class="p">,</span> <span class="mh">0x01</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span>
+          <span class="mh">0x0F</span><span class="p">,</span> <span class="mh">0x05</span><span class="p">].</span><span class="nf">pack</span><span class="p">(</span><span class="s1">'c*'</span><span class="p">),</span>
+  <span class="s1">','</span> <span class="o">=&gt;</span> <span class="p">[</span><span class="mh">0x48</span><span class="p">,</span> <span class="mh">0xC7</span><span class="p">,</span> <span class="mh">0xC0</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span>
+          <span class="mh">0x48</span><span class="p">,</span> <span class="mh">0xC7</span><span class="p">,</span> <span class="mh">0xC7</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span>
+          <span class="mh">0x4C</span><span class="p">,</span> <span class="mh">0x89</span><span class="p">,</span> <span class="mh">0xD6</span><span class="p">,</span>
+          <span class="mh">0x48</span><span class="p">,</span> <span class="mh">0xC7</span><span class="p">,</span> <span class="mh">0xC2</span><span class="p">,</span> <span class="mh">0x01</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">,</span>
+          <span class="mh">0x0F</span><span class="p">,</span> <span class="mh">0x05</span><span class="p">].</span><span class="nf">pack</span><span class="p">(</span><span class="s1">'c*'</span><span class="p">)</span>
+<span class="p">}.</span><span class="nf">freeze</span>
+
+<span class="k">def</span> <span class="nf">compile_bf</span><span class="p">(</span><span class="n">bf</span><span class="p">,</span> <span class="n">memory</span><span class="p">)</span>
+  <span class="n">asm</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\x49\xBA</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span> <span class="o">+</span> <span class="s2">"</span><span class="si">#{</span><span class="p">[</span><span class="n">memory</span><span class="p">.</span><span class="nf">address</span><span class="p">].</span><span class="nf">pack</span><span class="p">(</span><span class="s1">'Q&lt;'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+  <span class="n">bf</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">instruction</span><span class="o">|</span>
+    <span class="k">case</span> <span class="n">instruction</span>
+    <span class="k">when</span> <span class="s1">'&gt;'</span><span class="p">,</span> <span class="s1">'&lt;'</span><span class="p">,</span> <span class="s1">'+'</span><span class="p">,</span> <span class="s1">'-'</span><span class="p">,</span> <span class="s1">'.'</span><span class="p">,</span> <span class="s1">','</span>
+      <span class="n">asm</span> <span class="o">&lt;&lt;</span> <span class="no">INSTRUCTIONS_MAPPING</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="n">instruction</span><span class="p">)</span>
+    <span class="k">when</span> <span class="s1">'['</span>
+      <span class="p">[</span><span class="err">…</span><span class="p">]</span>
+    <span class="k">when</span> <span class="s1">']'</span>
+      <span class="p">[</span><span class="err">…</span><span class="p">]</span>
+    <span class="k">else</span>
+      <span class="k">raise</span> <span class="s2">"invalid instruction: </span><span class="si">#{</span><span class="n">instruction</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+  <span class="n">asm</span> <span class="o">&lt;&lt;</span> <span class="s2">"</span><span class="se">\xC3</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  On remarque que j’ai ajouté une clause <code>else</code> au <code>case</code>.
+  Cela semble inutile au premier abord, car <code>bf</code> ne contient que des
+  caractères faisant parti du jeu d’instructions du Brainfuck (grâce
+  au <code>select</code> appliqué dans la fonction <code>main</code>).
+  Cependant, ce <code>else</code> est utile pour détecter des erreurs du
+  développeur. Par exemple, dans ma première version du code le
+  caractère <code>.</code> était présent deux fois dans la
+  clause <code>when</code> de la ligne 23 et l’instruction <code>,</code>
+  n’était pas géré. Grâce au <code>else</code>, l’erreur a été très rapidement
+  mise en évidence (et corrigé !).
+</p>
+
+<h4>Compilation des boucles</h4>
+
+<p>
+  Il ne reste plus que deux instructions à gérer : <code>[</code>
+  et <code>]</code>, qui permettent de faire des boucles en Brainfuck.
+</p>
+
+<p>
+  Pour rappel, l’instruction <code>[</code> saute à l’instruction suivant
+  le <code>]</code> correspondant si la valeur de la case mémoire actuellement
+  pointée est égale à zéro. En assembleur ça se traduit par :
+</p>
+
+    <figure class="code">
+      <figcaption>Instructions assembleur pour [</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre>cmpb [r10], 0
+jz offset_vers_l_instruction_suivant_]
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Dans le cas de <code>]</code> on fait un saut si la valeur est différente de
+  zéro, ce qui donne :
+</p>
+
+    <figure class="code">
+      <figcaption>Instructions assembleur pour ]</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre>cmpb [r10], 0
+jnz offset_vers_l_instruction_suivant_[
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Le problème étant de calculer les <em>offsets</em> des sauts (surtout dans le
+  cas de <code>[</code> car on ne connait pas encore la position
+  du <code>]</code> correspondant au moment où l’on traite <code>[</code>).
+</p>
+
+<p>
+  Pour résoudre ce problème, nous allons avoir besoin d’une pile et nous allons
+  appliquer les opérations suivantes :
+</p>
+
+<ul>
+  <li>
+    lorsque l’on rencontre l’instruction <code>[</code> :
+    <ul>
+      <li>
+        on génère l’instruction de comparaison (le <code>cmpb</code>).
+      </li>
+      <li>
+        on empile la position courante (<code>jz_pos</code>) car nous devrons y
+        revenir pour mettre à jour le code généré lorsque l’on trouvera
+        le <code>]</code> correspondant.
+      </li>
+      <li>
+        on insère un <em>placeholder</em> de 6 octets (6 octets car
+        l’instruction de saut <code>jz</code> est encodée sur 2 octets et
+        l’<em>offset</em> est encodé sur 4 octets).
+      </li>
+    </ul>
+  </li>
+  <li>
+    lorsque l’on rencontre l’instruction <code>]</code> :
+    <ul>
+      <li>
+        on génère l’instruction de comparaison (le <code>cmpb</code>).
+      </li>
+      <li>
+        on récupère le <code>jz_pos</code> correspondant (sur le dessus de la
+        pile) : il contient l’adresse du <em>placeholder</em> à modifier.
+      </li>
+      <li>
+        on calcule l’<em>offset</em> du saut pour <code>[</code> :
+        l’<em>offset</em> est calculé entre les deux positions situées juste
+        après les instructions de saut elles-mêmes.
+      </li>
+      <li>
+        on remplace le <em>placeholder</em> par un <code>jz</code> avec
+        l’<em>offset</em> que l’on vient de calculer.
+      </li>
+      <li>
+        on calcule l’<em>offset</em> dans l’autre sens pour <code>]</code> (pour
+        sauter en arrière, vers le début de la boucle) et on génère
+        l’instruction <code>jnz</code> avec cet <em>offset</em>.
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p>Un petit schéma pour essayer de visualiser tout ça :</p>
+
+<p>
+  <img src="/static/images/jump_offset.png" class="centered" title="Schéma explicatif du calcul des offsets" alt="Schéma explicatif du calcul des offsets">
+</p>
+
+<p>Et le code correspondant :</p>
+
+    <figure class="code">
+      <figcaption>Fonction de compilation à la volée</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+</pre></td><td class="rouge-code"><pre><span class="k">def</span> <span class="nf">compile_bf</span><span class="p">(</span><span class="n">bf</span><span class="p">,</span> <span class="n">memory</span><span class="p">)</span>
+  <span class="n">stack</span> <span class="o">=</span> <span class="p">[]</span>
+  <span class="c1"># movabs r10, @memory (in little-endian)</span>
+  <span class="n">asm</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\x49\xBA</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span> <span class="o">+</span> <span class="s2">"</span><span class="si">#{</span><span class="p">[</span><span class="n">memory</span><span class="p">.</span><span class="nf">address</span><span class="p">].</span><span class="nf">pack</span><span class="p">(</span><span class="s1">'Q&lt;'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+  <span class="n">bf</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">instruction</span><span class="o">|</span>
+    <span class="k">case</span> <span class="n">instruction</span>
+    <span class="k">when</span> <span class="s1">'&gt;'</span><span class="p">,</span> <span class="s1">'&lt;'</span><span class="p">,</span> <span class="s1">'+'</span><span class="p">,</span> <span class="s1">'-'</span><span class="p">,</span> <span class="s1">'.'</span><span class="p">,</span> <span class="s1">','</span>
+      <span class="n">asm</span> <span class="o">&lt;&lt;</span> <span class="no">INSTRUCTIONS_MAPPING</span><span class="p">.</span><span class="nf">fetch</span><span class="p">(</span><span class="n">instruction</span><span class="p">)</span>
+    <span class="k">when</span> <span class="s1">'['</span>
+      <span class="n">asm</span> <span class="o">&lt;&lt;</span> <span class="s2">"</span><span class="se">\x41\x80\x3A\x00</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span> <span class="c1"># cmpb [r10], 0</span>
+      <span class="n">stack</span> <span class="o">&lt;&lt;</span> <span class="n">asm</span><span class="p">.</span><span class="nf">size</span> <span class="c1"># Save the offset where we will patch the jump.</span>
+      <span class="c1"># Insert a placeholder of 6 bytes (2 for JZ + 4 for the address).</span>
+      <span class="n">asm</span> <span class="o">&lt;&lt;</span> <span class="s2">"</span><span class="se">\x0F\x84\x00\x00\x00\x00</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span>
+    <span class="k">when</span> <span class="s1">']'</span>
+      <span class="k">raise</span> <span class="s1">'unmatched ]'</span> <span class="k">if</span> <span class="n">stack</span><span class="p">.</span><span class="nf">empty?</span>
+      <span class="n">asm</span> <span class="o">&lt;&lt;</span> <span class="s2">"</span><span class="se">\x41\x80\x3A\x00</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span> <span class="c1"># cmpb [r10], 0</span>
+      <span class="n">jz_pos</span>     <span class="o">=</span> <span class="n">stack</span><span class="p">.</span><span class="nf">pop</span>    <span class="c1"># Address of the JZ to patch.</span>
+      <span class="n">start_loop</span> <span class="o">=</span> <span class="n">jz_pos</span> <span class="o">+</span> <span class="mi">6</span>   <span class="c1"># Address of the first instruction of the loop body.</span>
+      <span class="n">end_loop</span>   <span class="o">=</span> <span class="n">asm</span><span class="p">.</span><span class="nf">size</span> <span class="o">+</span> <span class="mi">6</span> <span class="c1"># Address of the first instruction after the loop body.</span>
+      <span class="c1"># Generate the jump to the start of the loop (using JNZ).</span>
+      <span class="n">offset</span> <span class="o">=</span> <span class="n">compute_jump_offset</span><span class="p">(</span><span class="n">end_loop</span><span class="p">,</span> <span class="n">start_loop</span><span class="p">)</span>
+      <span class="n">asm</span> <span class="o">&lt;&lt;</span> <span class="s2">"</span><span class="se">\x0F\x85</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span> <span class="o">&lt;&lt;</span> <span class="p">[</span><span class="n">offset</span><span class="p">].</span><span class="nf">pack</span><span class="p">(</span><span class="s1">'L&lt;'</span><span class="p">)</span> <span class="c1"># L&lt; because little endian!</span>
+      <span class="c1"># Go back to patch the jump to the end of the loop.</span>
+      <span class="n">offset</span> <span class="o">=</span> <span class="n">compute_jump_offset</span><span class="p">(</span><span class="n">start_loop</span><span class="p">,</span> <span class="n">end_loop</span><span class="p">)</span>
+      <span class="n">asm</span><span class="p">[</span><span class="n">jz_pos</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\x0F\x84</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span> <span class="o">+</span> <span class="p">[</span><span class="n">offset</span><span class="p">].</span><span class="nf">pack</span><span class="p">(</span><span class="s1">'L&lt;'</span><span class="p">)</span>
+    <span class="k">else</span>
+      <span class="k">raise</span> <span class="s2">"invalid instruction: </span><span class="si">#{</span><span class="n">instruction</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+  <span class="k">raise</span> <span class="s1">'unmatched ['</span> <span class="k">unless</span> <span class="n">stack</span><span class="p">.</span><span class="nf">empty?</span>
+  <span class="n">asm</span> <span class="o">&lt;&lt;</span> <span class="s2">"</span><span class="se">\xC3</span><span class="s2">"</span><span class="p">.</span><span class="nf">b</span> <span class="c1"># ret</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  La fonction <code>compute_jump_offset</code> est une traduction en Ruby de la
+  fonction C++
+  <code>compute_relative_32bit_offset</code> d’Eli qui est disponible
+  <a href="https://github.com/eliben/code-for-blog/blob/master/2017/bfjit/jit_utils.cpp">ici</a>.
+  La seule subtilité c’est que les entiers en Ruby n’ont pas de taille fixe donc
+  il faut bien penser à ne garder que les 32 premiers bits avec un masque.
+</p>
+
+    <figure class="code">
+      <figcaption>La fonction compute_jump_offset</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+</pre></td><td class="rouge-code"><pre><span class="k">def</span> <span class="nf">compute_jump_offset</span><span class="p">(</span><span class="n">from</span><span class="p">,</span> <span class="n">to</span><span class="p">)</span>
+  <span class="k">if</span> <span class="n">to</span> <span class="o">&gt;=</span> <span class="n">from</span>
+    <span class="n">diff</span> <span class="o">=</span> <span class="n">to</span> <span class="o">-</span> <span class="n">from</span>
+    <span class="k">raise</span> <span class="s1">'offset too large'</span> <span class="k">unless</span> <span class="n">diff</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">31</span><span class="p">)</span>
+    <span class="n">diff</span>
+  <span class="k">else</span>
+    <span class="c1"># Here the diff is negative, so we need to encode it as 2s complement.</span>
+    <span class="n">diff</span> <span class="o">=</span> <span class="n">from</span> <span class="o">-</span> <span class="n">to</span>
+    <span class="k">raise</span> <span class="s1">'offset too large'</span> <span class="k">unless</span> <span class="p">(</span><span class="n">diff</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">31</span><span class="p">)</span>
+    <span class="p">(</span><span class="o">~</span><span class="n">diff</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0xFFFFFFFF</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Voilà ! Notre fonction de compilation est complète. Il n’y a plus qu’a
+  tester :).
+</p>
+
+<h3>Benchmark</h3>
+
+<p>
+  Le code complet de <code>bf-jit.rb</code> est disponible
+  <a href="/static/code/ruby-jit/bf-jit.rb">ici</a>.
+</p>
+
+<p>
+  Pour mettre en évidence les avantages de la compilation à la volée en terme de
+  performance, j’ai testé <code>bf-jit.rb</code> contre deux autres
+  implémentations parmi celles présentées dans
+  <a href="/blog/2010/12/30/interpreteurs-brainfuck/">mon premier article sur le Brainfuck</a> :
+</p>
+
+<ul>
+  <li>
+    <a href="/static/code/bfi/rbfi.rb">rbfi</a> : un interpréteur naïf
+    écrit en Ruby, par Ouranos.
+  </li>
+  <li>
+    <a href="/static/code/bfi/cbfi.tar.xz">cbfi</a> : mon interpréteur en
+    C, qui implémente quelques optimisations basiques.
+  </li>
+</ul>
+
+
+<p>
+  Le programme Brainfuck utilisé pour le benchmark est
+  <a href="/static/code/ruby-jit/primes.bf">primes.bf</a> qui est un
+  programme qui calcule les nombres premiers.
+</p>
+
+    <figure class="code">
+      <figcaption>Résultats</figcaption>
+      <div class="highlight">
+        <pre>% time ./cbfi "$(cat primes.bf)" &lt;&lt;&lt; 100
+[…] 0,95s user 0,00s system 99% cpu 0,953 total
+
+% time ./rbfi.rb primes.bf &lt;&lt;&lt; 100
+[…] 493,37s user 0,41s system 99% cpu 8:13,87 total
+
+% time ./bf-jit.rb primes.bf &lt;&lt;&lt; 100
+[…] 0,23s user 0,02s system 99% cpu 0,249 total
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Pas mal du tout ! Presque 4x plus rapide que la version C ! Et pourtant notre
+  compilateur est très stupide : il traduit le code instruction par instruction.
+</p>
+
+<p>
+  D’ailleurs, ce comportement naïf est pénalisant sur certains programmes tel
+  que <a href="/static/code/ruby-jit/hanoi.bf">hanoi.bf</a> où mon
+  interpréteur C est plus rapide (grâce à ses optimisations)
+  que <code>bf-jit.rb</code>. Cela étant dit, il nous suffirait d’implémenter
+  les optimisations décrites dans les articles d’Eli pour que notre compilateur
+  repasse en tête :-)
+</p>
+
+<h2>Aller plus loin</h2>
+
+<p>
+  Au lieu d’écrire notre code directement en hexadécimal, on peut utiliser un
+  assembleur (comme <a href="https://www.cr0.org/progs/metasm/">metasm</a> ou
+  <a href="https://github.com/seattlerb/wilson">wilson</a> par exemple) pour
+  pouvoir utiliser des mnémoniques et améliorer la lisibilité/souplesse du code.
+</p>
+
+<p>
+  Par exemple, si l’on utilise metasm pour réécrire le petit code d’exemple de
+  <code>jit.rb</code> on obtient :
+</p>
+
+    <figure class="code">
+      <figcaption>Utilisation de metasm</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+</pre></td><td class="rouge-code"><pre><span class="k">if</span> <span class="kp">__FILE__</span> <span class="o">==</span> <span class="vg">$PROGRAM_NAME</span>
+  <span class="nb">require</span> <span class="s1">'metasm'</span>
+
+  <span class="n">asm</span> <span class="o">=</span> <span class="o">&lt;&lt;-</span><span class="no">EOS</span><span class="sh">
+  mov rax, rdi
+  add rax, 4
+  ret
+</span><span class="no">  EOS</span>
+  <span class="n">code</span> <span class="o">=</span> <span class="no">Metasm</span><span class="o">::</span><span class="no">Shellcode</span><span class="p">.</span><span class="nf">assemble</span><span class="p">(</span><span class="no">Metasm</span><span class="o">::</span><span class="no">X86_64</span><span class="p">.</span><span class="nf">new</span><span class="p">,</span> <span class="n">asm</span><span class="p">).</span><span class="nf">encoded</span><span class="p">.</span><span class="nf">data</span>
+  <span class="n">func</span> <span class="o">=</span> <span class="no">JitFunction</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="ss">:long</span><span class="p">,</span> <span class="p">[</span><span class="ss">:long</span><span class="p">],</span> <span class="n">code</span><span class="p">)</span>
+  <span class="k">begin</span>
+    <span class="nb">puts</span> <span class="n">func</span><span class="p">.</span><span class="nf">call</span><span class="p">(</span><span class="o">-</span><span class="mi">100</span><span class="p">)</span>
+  <span class="k">ensure</span>
+    <span class="n">func</span><span class="p">.</span><span class="nf">free</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Ce qui est tout de même un poil plus lisible :)</p>
+
+<p>
+  On pourrait même aller jusqu’à utiliser LLVM (via
+  <a href="https://github.com/ruby-llvm/ruby-llvm">ruby-llvm</a>) pour générer
+  du code optimisé et devenir facilement multi-plateforme au lieu d’être limité
+  aux processeurs x86_64.
+</p>
+
+<div class="footnotes">
+  <hr class="weak-hr" />
+  <ol>
+    <li id="fn:1">
+      <p>
+        Pour savoir pourquoi et comment, je vous renvoie sur l’article Wikipédia
+        du <a href="https://en.wikipedia.org/wiki/W%5EX">W^X</a>.<a href="#fnref:1">↩</a>
+    </p>
+    </li>
+    <li id="fn:2">
+      <p>
+        Nous aurions pu utiliser la
+        gem <a href="https://rubygems.org/gems/mmap2">mmap2</a>, mais vu que
+        notre cas d’utilisation est relativement simple et limité c’est plus
+        pédagogique de le faire soi-même.<a href="#fnref:2">↩</a>
+    </p>
+    </li>
+    <li id="fn:3">
+      <p>
+        <code>mmap</code> ne peut pas renvoyer <code>NULL</code> pour signaler
+        une erreur car l’adresse 0 est une valeur de retour valide (en utilisant
+        le flag <code>MAP_FIXED</code>), cette fonctionnalité
+        de <code>mmap</code> a d’ailleurs souvent été utilisée pour exploiter
+        des déréférencements de pointeur <code>NULL</code> dans le noyau
+        (voir <a href="https://blogs.oracle.com/linux/post/much-ado-about-null-exploiting-a-kernel-null-dereference">
+          cet article
+        </a> par exemple).<a href="#fnref:3">↩</a>
+      </p>
+    </li>
+  </ol>
+</div>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2017-09-06T00:00:00Z"
+            itemprop="datePublished">
+        2017-09-06
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#ruby" rel="tag">Ruby</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

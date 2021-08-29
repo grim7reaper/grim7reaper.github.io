@@ -1,0 +1,1136 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Les pointeurs opaques — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2011/09/17/les-pointeurs-opaques/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Les pointeurs opaques</h1>
+
+  <p><em>Cet article provient de mon ancien site Internet.</em></p>
+
+<h2>Présentation</h2>
+
+<p>
+  Bien avant la démocratisation de la programmation orientée objet, les
+  développeurs ont ressenti le besoin d’organiser leur code en modules et de
+  découpler l’interface du module de son implémentation. Pour cela, ils ont mis
+  en place un mécanisme d’encapsulation.
+</p>
+
+<p>
+  Avec les langages orienté objet c’est très simple à mettre en œuvre car la
+  plupart d’entre eux offrent un
+  mécanisme <code>public</code>/<code>private</code> (voire
+  <code>protected</code>). Or, en C (car c’est de C dont il est question ici) ce
+  genre de choses n’existe pas. C’est là qu’interviennent nos amis les pointeurs
+  opaques.
+</p>
+
+<p>
+  L’usage de pointeurs opaques est une technique très répandue. Ils sont
+  largement utilisés dans les bibliothèques. On les retrouve entre autres dans
+  GTK+ et la zlib. On les retrouve même dans certaines implémentations de la
+  bibliothèque standard du C via le type <code>FILE*</code>.
+</p>
+
+<p>Il y a deux moyens d’implémenter les pointeurs opaques :</p>
+
+<ul>
+  <li>
+    Soit on se base sur le savoir-vivre de l’utilisateur : dans ce cas, s’il
+    viole (volontairement ou pas) l’encapsulation le compilateur ne dira rien.
+    C’est cette technique qui est utilisée dans les bibliothèques que j’ai
+    précédemment cité ;
+  </li>
+  <li>
+    Soit on met ce qu’il faut en œuvre pour que le compilateur nous aide à faire
+    respecter l’encapsulation.
+  </li>
+</ul>
+
+
+<p>
+  C’est cette dernière technique que je vais présenter plus en détail dans la
+  suite de cet article. Mais avant cela, voyons quelques avantages apportés par
+  l’utilisation des pointeurs opaques.
+</p>
+
+<h2>Apports des pointeurs opaques</h2>
+
+<h3>Encapsulation</h3>
+
+<p>
+  Un des gros avantages de l’encapsulation c’est que l’on peut modifier à
+  volonté l’implémentation sans que cela n’impacte le code de l’utilisateur
+  (dans une certaine mesure : il ne faut pas casser la compatibilité au niveau
+  de l’interface proposée ni modifier le layout de la structure si celle-ci est
+  directement manipulée). On a donc plus de liberté pour faire évoluer notre
+  code.
+</p>
+
+<p>
+  Ici le rôle des pointeurs opaques est évident, l’utilisateur ne connaît pas
+  les champs, il ne peut donc pas y accéder (c’est comme si c’était
+  en <code>private</code>). Il doit donc passer par les fonctions que nous avons
+  définies (l’interface).
+</p>
+
+<p>
+  On notera que le mécanisme des pointeurs opaques est moins souple que les
+  solutions basées sur <code>public</code>/<code>private</code>. En effet, ici
+  c’est toute la structure qui est opaque (et donc privée). Il est cependant
+  possible de ruser afin d’obtenir un contrôle plus fin (un exemple est présenté
+  à la fin de cet article).
+</p>
+
+<p>
+  On pourrait penser que l’arrivée des langages orienté objet et leurs
+  mécanismes d’encapsulation intégrés avait signée le glas des pointeurs
+  opaques. Que nenni ! On les croise encore en C++, certes pas pour faire de
+  l’encapsulation mais pour le point suivant.
+</p>
+
+<h3>Compatibilité ascendante sans recompilation</h3>
+
+<h4>Contexte</h4>
+
+<p>
+  Ce dernier point concerne surtout le développement de bibliothèques
+  dynamiques.
+</p>
+
+<p>
+  Quand on développe une bibliothèque un tant soit peu complexe, il y a de
+  fortes chances pour que l’on utilise des structures. Or ces structures
+  risquent d’évoluer (ajout ou retrait de champs) en même temps que notre
+  bibliothèque. Et là, ça risque de poser un souci : l’utilisateur va devoir
+  recompiler TOUS ses codes qui utilisent notre bibliothèque (ce qui annule l’un
+  des avantages des bibliothèques dynamiques) sous peine d’emmerdes. Comme un
+  exemple vaut mieux qu’un long discours, en voici un (un exemple, pas un long
+  discours :p).
+</p>
+
+<p>
+  Pour cet exemple, nous allons développer une bibliothèque qui implémente une
+  liste simplement chaînée. Tout d’abord, le fichier d’en-tête :
+</p>
+
+    <figure class="code">
+      <figcaption>lib.h</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+</pre></td><td class="rouge-code"><pre><span class="cp">#ifndef H_LIB_LS_20110917173256
+#define H_LIB_LS_20110917173256
+</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">node_</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">node_</span><span class="o">*</span> <span class="n">next</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">node</span><span class="p">;</span>
+
+<span class="k">typedef</span> <span class="k">struct</span>
+<span class="p">{</span>
+    <span class="n">node</span><span class="o">*</span> <span class="n">head</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">list</span><span class="p">;</span>
+
+<span class="n">list</span> <span class="nf">list_init</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">dump</span><span class="p">(</span><span class="n">list</span> <span class="n">l</span><span class="p">);</span>
+
+<span class="cp">#endif
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Ensuite, l’implémentation :</p>
+
+    <figure class="code">
+      <figcaption>lib.c</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdio.h&gt;
+#include "lib.h"
+</span>
+<span class="n">list</span> <span class="nf">list_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">list</span> <span class="n">l</span> <span class="o">=</span> <span class="p">{</span> <span class="nb">NULL</span> <span class="p">};</span>
+    <span class="k">return</span> <span class="n">l</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">dump</span><span class="p">(</span><span class="n">list</span> <span class="n">l</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"%p</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">l</span><span class="p">.</span><span class="n">head</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Et enfin, le programme principal :</p>
+
+    <figure class="code">
+      <figcaption>main.c</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre><span class="cp">#include "lib.h"
+</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">list</span> <span class="n">l</span> <span class="o">=</span> <span class="n">list_init</span><span class="p">();</span>
+    <span class="n">dump</span><span class="p">(</span><span class="n">l</span><span class="p">);</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Bon, maintenant on compile et on exécute tout ça. On obtient :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% gcc -fpic -c lib.c
+% gcc -shared -Wl,-soname,liblib.so lib.o -o liblib.so
+% gcc main.c -o main -llib -L./
+% LD_LIBRARY_PATH=./ ./main
+(nil)
+</pre>
+      </div>
+    </figure>
+
+
+<p>Bon, et bien tout est OK :)</p>
+
+<p>
+  Maintenant on décide d’améliorer notre bibliothèque. Pour le moment, pour
+  avoir la taille de notre liste, on doit la parcourir entièrement et compter
+  les éléments. C’est un algorithme en <code>O(N)</code>. On décide alors de
+  garder cette taille dans la tête de notre liste afin de pouvoir y accéder en
+  temps constant. On ajoute donc un champ à la structure <code>list</code>.
+</p>
+
+    <figure class="code">
+      <figcaption>lib.h v2</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+</pre></td><td class="rouge-code"><pre><span class="cp">#ifndef H_LIB_LS_20110917173256
+#define H_LIB_LS_20110917173256
+</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">node_</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">node_</span><span class="o">*</span> <span class="n">next</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">node</span><span class="p">;</span>
+
+<span class="k">typedef</span> <span class="k">struct</span>
+<span class="p">{</span>
+    <span class="n">node</span><span class="o">*</span> <span class="n">head</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="n">size</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">list</span><span class="p">;</span>
+
+<span class="n">list</span> <span class="nf">list_init</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">dump</span><span class="p">(</span><span class="n">list</span> <span class="n">l</span><span class="p">);</span>
+
+<span class="cp">#endif
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+    <figure class="code">
+      <figcaption>lib.c v2</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdio.h&gt;
+#include "lib.h"
+</span>
+<span class="n">list</span> <span class="nf">list_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">list</span> <span class="n">l</span> <span class="o">=</span> <span class="p">{</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0u</span> <span class="p">};</span>
+    <span class="k">return</span> <span class="n">l</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">dump</span><span class="p">(</span><span class="n">list</span> <span class="n">l</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"%p</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">l</span><span class="p">.</span><span class="n">head</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"%u</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">l</span><span class="p">.</span><span class="n">size</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  C’est une modification mineure de notre bibliothèque. L’interface offerte à
+  l’utilisateur ne change pas (les prototypes de <code>list_init</code>
+  et <code>dump</code> sont identiques à ceux de la version précédente). Comme
+  c’est une modification mineure, notre nouvelle version est 100% compatible
+  avec l’ancienne. Donc les codes utilisant la version précédente peuvent
+  utiliser cette version sans aucun souci, sans recompilation. Ou pas…
+</p>
+
+<p>Voyons le comportement de notre programme avec cette nouvelle version :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% gcc -fpic -c lib.c
+% gcc -shared -Wl,-soname,liblib.so lib.o -o liblib.so
+% LD_LIBRARY_PATH=./ ./main
+(nil)
+2383424856
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Ouch, le champ <code>size</code> est dans les choux : 2383424856 (vous pouvez
+  obtenir une valeur différente) alors que la valeur attendue est 0 (la liste
+  est vide).
+</p>
+
+<h4>Explications</h4>
+
+<p>Alors, pourquoi ça déconne ?</p>
+
+<p>
+  Et bien en ajoutant/retirant un champ, on change la taille de notre structure.
+  D’ailleurs, rien qu’en changeant l’ordre des champs on peut modifier la taille
+  de la structure à cause du <em>padding</em>. Notre bibliothèque est
+  recompilée, donc la fonction <code>dump</code> a un code correct pour
+  récupérer son argument sur la pile. Elle va dépiler un certain nombre de bytes
+  (je ne donne pas de valeur ici car elle va dépendre de l’architecture
+  sous-jacente) correspondant à la taille d’une structure composée d’un pointeur
+  et d’un entier non-signé. En revanche, la fonction <code>main</code> du code
+  utilisateur n’est pas recompilée donc avant d’appeler
+  <code>dump</code> elle va empiler une structure composée d’un unique pointeur.
+  Dès lors, on voit le problème : le code appelant empile une structure de
+  taille X et le code appelé dépile une structure de taille Y. Cela va très vite
+  provoquer des trucs foireux (comme dans notre cas où l’on dépile plus que ce
+  que l’on a empilé).
+</p>
+
+<p>
+  De même, si l’on fait un <code>malloc</code> de la structure dans notre
+  programme principal on ne va pas allouer une taille suffisante pour contenir
+  le nouveau champ, ce qui aura des conséquences fâcheuses par la suite.
+</p>
+
+<h4>Solution</h4>
+
+<p>
+  La solution est évidemment de passer par un pointeur opaque (c’est un peu le
+  sujet de cet article en même temps). En effet, si l’on passe toujours par un
+  pointeur pour manipuler notre structure on n’aura pas à se soucier de sa
+  taille. Quand on la passe en paramètre, il faudra toujours empiler/dépiler un
+  pointeur (quelque soit la taille de la structure) et les allocations de
+  structures se feront dans le code de notre bibliothèque qui, lui, allouera
+  toujours la bonne taille.
+</p>
+
+<p>
+  Il faut donc modifier notre bibliothèque pour qu’elle utilise un pointeur
+  opaque. Cela nécessite un peu plus de code, mais on n’a rien sans rien. Voilà
+  donc le résultat :
+</p>
+
+    <figure class="code">
+      <figcaption>lib.h v3</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+</pre></td><td class="rouge-code"><pre><span class="cp">#ifndef H_LIB_LS_20110917173256
+#define H_LIB_LS_20110917173256
+</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">list__</span><span class="o">*</span> <span class="n">list</span><span class="p">;</span> <span class="cm">/* Le fameux pointeur opaque. */</span>
+
+<span class="n">list</span> <span class="nf">list_create</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">dump</span><span class="p">(</span><span class="n">list</span> <span class="n">l</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">list_destroy</span><span class="p">(</span><span class="n">list</span><span class="o">*</span> <span class="n">l</span><span class="p">);</span>
+
+<span class="cp">#endif
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+    <figure class="code">
+      <figcaption>lib.c v3</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdlib.h&gt;
+#include &lt;stdio.h&gt;
+#include "lib.h"
+</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">node_</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">node_</span><span class="o">*</span> <span class="n">next</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">node</span><span class="p">;</span>
+
+<span class="k">struct</span> <span class="n">list__</span>
+<span class="p">{</span>
+    <span class="n">node</span><span class="o">*</span> <span class="n">head</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">list</span> <span class="nf">list_create</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">list</span> <span class="n">l</span> <span class="o">=</span> <span class="n">malloc</span><span class="p">(</span><span class="k">sizeof</span> <span class="o">*</span><span class="n">l</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">l</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+        <span class="n">l</span><span class="o">-&gt;</span><span class="n">head</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">l</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">dump</span><span class="p">(</span><span class="n">list</span> <span class="n">l</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"%p</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">l</span><span class="o">-&gt;</span><span class="n">head</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">list_destroy</span><span class="p">(</span><span class="n">list</span><span class="o">*</span> <span class="n">l</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">l</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">l</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">free</span><span class="p">(</span><span class="o">*</span><span class="n">l</span><span class="p">);</span>
+        <span class="o">*</span><span class="n">l</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Notre programme principal subit lui aussi quelques modifications :</p>
+
+    <figure class="code">
+      <figcaption>main.c v3</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stddef.h&gt; </span><span class="cm">/* For NULL. */</span><span class="cp">
+#include "lib.h"
+</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">list</span> <span class="n">l</span> <span class="o">=</span> <span class="n">list_create</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">l</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">dump</span><span class="p">(</span><span class="n">l</span><span class="p">);</span>
+        <span class="n">list_destroy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">l</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Voyons si l’exécution est identique à celle sans pointeur opaque :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% gcc -fpic -c lib.c
+% gcc -shared -Wl,-soname,liblib.so lib.o -o liblib.so
+% gcc main.c -o main -llib -L./
+% LD_LIBRARY_PATH=./ ./main
+(nil)
+</pre>
+      </div>
+    </figure>
+
+
+<p>Oui !</p>
+
+<p>
+  Appliquons maintenant nos modifications (on notera que cette fois, seul le
+  fichier source <code>lib.c</code> est modifié) :
+</p>
+
+    <figure class="code">
+      <figcaption>lib.c v4</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdlib.h&gt;
+#include &lt;stdio.h&gt;
+</span>
+<span class="cp">#include "lib.h"
+</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">node_</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">node_</span><span class="o">*</span> <span class="n">next</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">node</span><span class="p">;</span>
+
+<span class="k">struct</span> <span class="n">list__</span>
+<span class="p">{</span>
+    <span class="n">node</span><span class="o">*</span> <span class="n">head</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="n">size</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="n">list</span> <span class="nf">list_create</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">list</span> <span class="n">l</span> <span class="o">=</span> <span class="n">malloc</span><span class="p">(</span><span class="k">sizeof</span> <span class="o">*</span><span class="n">l</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">l</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">l</span><span class="o">-&gt;</span><span class="n">head</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+        <span class="n">l</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">l</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">dump</span><span class="p">(</span><span class="n">list</span> <span class="n">l</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"%p</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">l</span><span class="o">-&gt;</span><span class="n">head</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"%u</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">l</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">list_destroy</span><span class="p">(</span><span class="n">list</span><span class="o">*</span> <span class="n">l</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">l</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">l</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">free</span><span class="p">(</span><span class="o">*</span><span class="n">l</span><span class="p">);</span>
+        <span class="o">*</span><span class="n">l</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Alors, avons-nous résolu le problème de compatibilité binaire ?</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% gcc -fpic -c lib.c
+% gcc -shared -Wl,-soname,liblib.so lib.o -o liblib.so
+% LD_LIBRARY_PATH=./ ./main
+(nil)
+0
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  <em>Yes, it works!</em> Les modifications internes de notre bibliothèque
+  n’obligeront pas les utilisateurs à recompiler tout le code qui en dépends.
+</p>
+
+<h4>Utilisation</h4>
+
+<p>
+  Comme vous pouvez le voir, cette technique est très utile. C’est d’ailleurs la
+  raison pour laquelle on rencontre encore des pointeurs opaques dans certains
+  langages objet. C’est même un idiome assez connu et on le retrouve en C++ sous
+  le nom de « PIMPL idiom » (ou « handle classes », « Compiler firewall idiom »
+  ou encore « Cheshire Cat »).
+</p>
+
+<p>
+  Pour ceux que cela intéresse, voici quelques liens à ce sujet (des articles
+  <a href="https://fr.wikipedia.org/wiki/Herb_Sutter">d’Herb Sutter</a>
+  et un de Vladimir Batov) :
+</p>
+
+<ul>
+  <li>
+    <a href="http://www.gotw.ca/publications/mill04.htm">Pimpls - Beauty Marks You Can Depend On</a> ;
+  </li>
+  <li>
+    <a href="http://www.gotw.ca/publications/mill05.htm">The Joy of Pimpls (or, More About the Compiler-Firewall Idiom)</a> ;
+  </li>
+  <li>
+    <a href="http://www.gotw.ca/gotw/024.htm">Compilation Firewalls</a> ;
+  </li>
+  <li>
+    <a href="https://www.drdobbs.com/cpp/making-pimpl-easy/205918714">Making Pimpl Easy</a> ;
+  </li>
+  <li>
+    <a href="http://www.gotw.ca/gotw/028.htm">The Fast Pimpl Idiom</a>.
+  </li>
+</ul>
+
+
+<p>
+  On retrouve cette technique dans de très gros projets tels que
+  <a href="https://web.archive.org/web/20120310011206/https://qt-project.org/wiki/Dpointer">Qt</a>
+  et
+  <a href="https://community.kde.org/Policies/Library_Code_Policy#D-Pointers">KDE</a>.
+</p>
+
+<h2>Comment ça fonctionne ?</h2>
+
+<p>
+  Pour qu’un pointeur soit vraiment opaque (c’est‑à‑dire pour que le compilateur
+  nous aide) il faut utiliser un type incomplet. Il faut savoir qu’en C les
+  types sont classés en trois catégories
+  (Cf. <a href="/static/misc/normeC99.pdf">la norme</a>, 6.2.5 Types, page 33) :
+</p>
+
+<ul>
+  <li>
+    Les types « fonction » : ce sont les types qui décrivent une fonction. Ils
+    sont composés du type de retour et du nombre et du type des arguments ;
+  </li>
+  <li>
+    Les types incomplets : ce sont les types dont on ignore la taille. Cette
+    catégorie de type est elle-même divisée en trois parties :
+    <ul>
+      <li>
+        Le type <code>void</code> : c’est le seul type incomplet qui ne peut pas
+        être complété ;
+      </li>
+      <li>
+        Les tableaux dont la taille n’est pas spécifiée ;
+      </li>
+      <li>
+        Les structures et les unions dont le contenu est inconnu ;
+      </li>
+    </ul>
+  </li>
+  <li>
+    Les types « objet » : ce sont les types qui décrivent totalement un objet.
+    Ils rassemblent tout ce qui n’entre pas dans les deux catégories
+    précédentes.
+  </li>
+</ul>
+
+<p>
+  On s’assure de la coopération du compilateur en utilisant les types incomplets
+  <strong>ET</strong> la manière dont les compilateurs C fonctionnent. En effet,
+  les compilateurs C travaillent à partir d’unités de traduction
+  (<em>Translation Unit</em>) et chacune de ces unités est compilée de manière
+  totalement indépendante (c’est l’éditeur de liens qui se charge d’assembler
+  les fichiers objets résultants pour former l’exécutable final). Une unité de
+  traduction est composée d’un fichier source après le passage du préprocesseur
+  (Cf. <a href="/static/misc/normeC99.pdf">la norme</a>, 5.1.1.1 Program structure, page 9)
+  et elle est transformée en fichier objet lors du processus de compilation.
+</p>
+
+<p>
+  Et c’est là que réside toute l’astuce : l’utilisateur ne peut utiliser dans
+  ses fichiers sources (qui formeront ses unités de traduction) que notre
+  fichier d’en-tête (qui ne contiendra que la déclaration de notre structure)
+  donc le compilateur, lors de la phase de compilation, n’aura aucune
+  information sur la taille de notre structure (car la définition complète est
+  située en dehors des unités de traduction du code utilisateur). Cela a
+  plusieurs implications :
+</p>
+
+<ul>
+  <li>
+    Impossible de déclarer des variables du type <code>T</code> (<code>T</code>
+    étant notre structure) car le compilateur, ignorant la taille, ne peut pas
+    réserver l’espace nécessaire. La manipulation par pointeur est donc
+    obligatoire ;
+  </li>
+  <li>
+    Impossible de déréférencer un pointeur de type <code>T*</code> car le
+    compilateur, ignorant la taille, ne peut pas générer le code correspondant
+    au déréférencement (combien d’octets doit-il lire en mémoire ?).
+  </li>
+</ul>
+
+<p>
+  Et voilà le travail :-), avec ça l’utilisateur est obligé de passer par notre
+  interface pour manipuler nos structures et il ne peut pas les bidouiller à la
+  main. Enfin si, s’il le veut vraiment il pourra en jouant à la main avec les
+  adresses et l’arithmétique des pointeurs mais dans ce cas il devra connaître
+  la composition de notre structure et son code ne sera pas portable (voire
+  dépendant du compilateur…).
+</p>
+
+<h3>Exemple d’implémentation</h3>
+
+<p>
+  L’astuce, comme je le disais dans la partie précédente, c’est d’utiliser un
+  type incomplet. Concrètement, c’est très simple : dans le fichier d’en-tête on
+  met uniquement la déclaration de notre structure et dans le fichier source
+  correspondant on met sa définition.
+</p>
+
+<p>
+  Pour illustrer cela, rien de tel qu’un petit exemple. Ici, je ne me suis pas
+  cassé la tête et j’ai pris une structure pour la gestion d’une chaîne de
+  caractères.
+</p>
+
+<p>D’abord, le fichier d’en-tête :</p>
+
+    <figure class="code">
+      <figcaption>str.h</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre><span class="cp">#ifndef H_LS_STR_20101012213147
+#define H_LS_STR_20101012213147
+</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">Str__</span><span class="o">*</span> <span class="n">Str</span><span class="p">;</span>
+
+<span class="cm">/* Many very interesting functions. */</span>
+
+<span class="cp">#endif
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Ensuite, le fichier source correspondant :</p>
+
+    <figure class="code">
+      <figcaption>str.c</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+</pre></td><td class="rouge-code"><pre><span class="cp">#include "str.h"
+</span>
+<span class="k">struct</span> <span class="n">Str__</span>
+<span class="p">{</span>
+    <span class="kt">char</span><span class="o">*</span>  <span class="n">str</span><span class="p">;</span>  <span class="cm">/* String. */</span>
+    <span class="kt">size_t</span> <span class="n">slen</span><span class="p">;</span> <span class="cm">/* String length  (in characters, without '\0'). */</span>
+    <span class="kt">size_t</span> <span class="n">mlen</span><span class="p">;</span> <span class="cm">/* Size of buffer (in byte). */</span>
+<span class="p">};</span>
+
+<span class="cm">/* Many very interesting functions. */</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<h3>Une application possible : émulation de public/private</h3>
+
+<p>
+  Dans le fichier d’en-tête on définit notre structure avec ses membres publics
+  et on déclare un pointeur opaque vers sa partie privée. On définit également
+  notre interface.
+</p>
+
+    <figure class="code">
+      <figcaption>example.h</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+</pre></td><td class="rouge-code"><pre><span class="cp">#ifndef H_EXAMPLE_LS_20110915211258
+#define H_EXAMPLE_LS_20110915211258
+</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">private_example__</span><span class="o">*</span> <span class="n">Private_example</span><span class="p">;</span>
+
+<span class="cm">/* Public attributes. */</span>
+<span class="k">typedef</span> <span class="k">struct</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">public_attr_1</span><span class="p">;</span>
+    <span class="n">Private_example</span> <span class="n">priv_part</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">Example</span><span class="p">;</span>
+
+<span class="cm">/* Interface definition. */</span>
+<span class="kt">void</span> <span class="nf">public_function_1</span><span class="p">(</span><span class="n">Example</span><span class="o">*</span> <span class="n">me</span><span class="p">);</span>
+
+<span class="cp">#endif
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Dans le fichier source, on définit la structure qui contient les attributs
+  privés et on implémente notre interface et les fonctions privées.
+</p>
+
+    <figure class="code">
+      <figcaption>example.c</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+</pre></td><td class="rouge-code"><pre><span class="cp">#include "example.h"
+</span>
+<span class="cm">/* Private attributes. */</span>
+<span class="k">struct</span> <span class="n">private_example__</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">private_attr_1</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="cm">/* Interface implementation. */</span>
+<span class="kt">void</span> <span class="nf">public_function_1</span><span class="p">(</span><span class="n">Example</span><span class="o">*</span> <span class="n">me</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="cm">/* do something. */</span>
+<span class="p">}</span>
+
+<span class="cm">/* Private functions. */</span>
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">private_function_1</span><span class="p">(</span><span class="n">Example</span><span class="o">*</span> <span class="n">me</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="cm">/* do something. */</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Le programme minimal qui suit illustre ce que l’on peut faire et ce que l’on
+  ne peut pas faire.
+</p>
+
+    <figure class="code">
+      <figcaption>main.c</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+</pre></td><td class="rouge-code"><pre><span class="cp">#include "example.h"
+</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">Example</span> <span class="n">e</span><span class="p">;</span>
+    <span class="n">e</span><span class="p">.</span><span class="n">public_attr_1</span> <span class="o">=</span> <span class="mi">42</span><span class="p">;</span>
+    <span class="n">public_function_1</span><span class="p">(</span><span class="o">&amp;</span><span class="n">e</span><span class="p">);</span>
+    <span class="n">e</span><span class="p">.</span><span class="n">priv_part</span><span class="o">-&gt;</span><span class="n">private_attr_1</span> <span class="o">=</span> <span class="mi">42</span><span class="p">;</span>
+    <span class="n">private_function_1</span><span class="p">(</span><span class="o">&amp;</span><span class="n">e</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Voyons maintenant plus en détail cette fonction <code>main</code> :</p>
+
+<ul>
+  <li>
+    Ligne 5 : on déclare une variable de type <code>Example</code>. Pas de
+    problème ici car <code>Example</code> n’est pas un type incomplet ;
+  </li>
+  <li>
+    Ligne 6 : on accède à un attribut public. Là encore, aucun soucis, c’est
+    fait pour ;-) ;
+  </li>
+  <li>
+    Ligne 7 : On appelle une fonction publique, une fois de plus c’est correct
+    car on utilise l’interface fournie ;
+  </li>
+  <li>
+    Ligne 8 : là, ça se corse. On tente d’accéder à un attribut privé donc le
+    compilateur intervient :
+    <code>error: dereferencing pointer to incomplete type</code>. C’est bien le
+    comportement attendu :-) ;
+  </li>
+  <li>
+    Ligne 9 : on essaye d’appeler une fonction privée. Cette fois le compilateur
+    laisse passer, mais il nous met en garde
+    <code>
+      warning: implicit declaration of function "private_function_1"
+      [-Wimplicit-function-declaration]
+    </code>.
+    En revanche, l’éditeur de liens est intransigeant :
+    <code>undefined reference to `private_function'</code>. Encore gagné :-)
+  </li>
+</ul>
+
+
+<p>
+  En fait, pour la ligne 9, l’éditeur de liens pourrait considérer le code comme
+  étant valide si l’utilisateur définissait aussi une fonction appelée
+  <code>private_function_1</code>. Mais ce n’est pas grave car elle ne pourra
+  pas modifier la partie privée de notre structure <code>Example</code> (pour
+  les même raisons que la ligne 8) donc l’encapsulation est préservée.
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2011-09-17T00:00:00Z"
+            itemprop="datePublished">
+        2011-09-17
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#c" rel="tag">C</a> <a href="/blog/tags/#c++" rel="tag">C++</a> <a href="/blog/tags/#design-patterns" rel="tag">Design Patterns</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

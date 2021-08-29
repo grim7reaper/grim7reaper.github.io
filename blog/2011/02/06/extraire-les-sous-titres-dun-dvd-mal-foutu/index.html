@@ -1,0 +1,266 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Extraire les sous-titres d’un DVD mal foutu — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2011/02/06/extraire-les-sous-titres-dun-dvd-mal-foutu/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Extraire les sous-titres d’un DVD mal foutu</h1>
+
+  <p><em>Cet article provient de mon ancien site Internet.</em></p>
+
+<h2>Background</h2>
+
+<p>
+  Je possède quelques DVD et j’ai pris l’habitude de les extraire et de les
+  encoder sur mon ordinateur afin d’éviter d’avoir à les trimballer à chaque
+  déplacement. Pour cela, j’utilise le
+  couple <code>mplayer</code>/<code>mencoder</code> et ça fonctionne très bien.
+  En général…
+</p>
+
+<h2>Et là, c’est le drame !</h2>
+
+<p>
+  Tout allait bien dans le meilleur des mondes jusqu’à ce que je tombe sur ça.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>subtitle ( sid ): 0 language: unknown
+subtitle ( sid ): 0 language: fr
+subtitle ( sid ): 0 language: nl
+number of subtitles on disk: 3
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Et là, on se dit que ça risque de poser un petit soucis
+  à <code>mencoder</code> vu qu’il se base sur le <code>sid</code> pour
+  identifier la piste à extraire :-/
+</p>
+
+<p>
+  Et effectivement, je n’ai pas réussi à extraire les sous-titre français. Cela
+  dit, c’était peut-être réalisable, mais comme je ne maîtrise pas le couple
+  <code>mplayer</code>/<code>mencoder</code> à 100% bah je n’ai pas trouvé de
+  solutions (j’ai bien tenté quelques bidouilles à base de <code>slang</code> et
+  de <strong>IFO</strong>, mais en vain…)
+</p>
+
+<p>
+  La seule technique que j’ai trouvé pour avoir les sous-titres français, c’est
+  de les changer via la touche <code>j</code> en mode interactif (c’est déjà
+  pas mal, mais totalement inutilisable dans un script d’extraction).
+</p>
+
+<h2>Ma solution</h2>
+
+<p>
+  Du coup, je me suis tourné vers un autre poids lourd du
+  domaine : <code>transcode</code>.
+</p>
+
+<p>Voici donc la procédure à suivre :</p>
+
+    <figure class="code">
+      <figcaption>Les commandes magiques</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre>mplayer -dvd-device POINT_DE_MONTAGE dvd://TITRE -identify
+tccat -i POINT_DE_MONTAGE -T TITRE,-1 | tcextract -x ps1 -t vob -a 0xN &gt; subs
+subtitle2vobsub -o subtitles -i CHEMIN_JUSQU_AU_FICHIER_IFO_CORRESPONDANT &lt; subs
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<h3>Identification</h3>
+
+<p>
+  La première commande m’a permis de repérer un truc fort utile pour la suite. Au
+  début, rien de bien nouveau.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>subtitle ( sid ): 0 language: unknown
+
+ID_SUBTITLE_ID=0
+subtitle ( sid ): 0 language: fr
+
+ID_SUBTITLE_ID=0
+ID_SID_0_LANG=fr
+subtitle ( sid ): 0 language: nl
+
+ID_SUBTITLE_ID=0
+ID_SID_0_LANG=nl
+number of subtitles on disk: 3
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Mais peu de temps après le début de la lecture du chapitre j’ai vu apparaître
+  ça.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>ID_SUBTITLE_ID=0
+ID_SUBTITLE_ID=1
+ID_SUBTITLE_ID=2
+ID_SUBTITLE_ID=3
+ID_SUBTITLE_ID=4
+ID_SUBTITLE_ID=5
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Hum, il y aurait donc six pistes de sous-titres. Bien, alors examinons cela !
+  Pour ce faire, j’ai lancé le DVD (sans le casser bien sûr, haha -___-"…)
+  et j’ai testé les différentes pistes avec la fameuse
+  touche <code>j</code>. Au final, j’ai :
+</p>
+
+<ul>
+  <li>La 0 et la 1 qui ne sous-titre que les génériques (super utile…) ;</li>
+  <li>La 2 et la 3 qui sont les sous-titres français tant recherché \o/ ;</li>
+  <li>La 4 et la 5 qui sont les sous-titres en néerlandais.</li>
+</ul>
+
+
+<p>
+  La seule chose qui différencie la piste 2 et 3, c’est la taille de la police
+  utilisée (idem pour 0 et 1 et pour 4 et 5). Bien ! Maintenant que
+  l’identification est faite, passons à l’extraction.
+</p>
+
+<h3>Extraction</h3>
+
+<p>
+  Il faut commencer par monter le DVD (via mount, pmount ou votre explorateur de
+  fichier). Maintenant, voyons de plus près comment fonctionne cette commande
+  (enfin, ces deux commandes serait plus juste).
+</p>
+
+<p>
+  La première commande est relative explicite. Le seul point un peu mystérieux
+  c’est le -1 : il sert à extraire tous les chapitres d’un titre.
+</p>
+
+<p>
+  La seconde commande mérite un peu plus d’explications. Le <code>ps1</code> est
+  le « codec » utilisé pour extraire les sous-titres (comment je le sais ? En
+  bien parce que je RFTM !). Le <code>vob</code> c’est tout bêtement le type de
+  fichier sur lequel je bosse (DVD donc). Et enfin, la fameuse constante
+  magique <code>0xN</code> ou N est égal à 20 + l’ID de la piste à extraire
+  (<code>0x22</code> ou <code>0x23</code> dans mon cas).
+</p>
+
+<p>
+  Bon, maintenant que l’on a nos sous-titres, il ne reste plus qu’à les
+  convertir. Je ne sais même pas si le format dans lequel je les ai récupérés
+  est exploitable, mais de toutes façons j’ai l’habitude de bosser avec des .idx
+  et des .sub (qui font un joli vobsub une fois mis ensemble).
+</p>
+
+<h3>Conversion</h3>
+
+<p>
+  Bon bah là, je pense que c’est trivial donc je ne vais pas m’attarder dessus.
+  On choisit le nom des fichiers de sortie (<code>subtitles.idx</code>
+  et <code>subtitles.sub</code> dans mon cas) et on indique bien le
+  fichier <strong>IFO</strong> correspondant au <strong>VOB</strong> sur lequel
+  on bosse depuis le début.
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2011-02-06T00:00:00Z"
+            itemprop="datePublished">
+        2011-02-06
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#trucs-et-astuces" rel="tag">Trucs et Astuces</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

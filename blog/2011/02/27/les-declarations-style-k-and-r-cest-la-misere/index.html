@@ -1,0 +1,309 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Les déclarations style K&amp;R c’est la misère — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2011/02/27/les-declarations-style-k-and-r-cest-la-misere/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Les déclarations style K&amp;R c’est la misère</h1>
+
+  <p><em>Cet article provient de mon ancien site Internet.</em></p>
+
+<h2>C’est quoi ?</h2>
+
+<p>
+  C’est une manière de déclarer les fonctions. Les déclarations <em>K&amp;R</em>
+  sont un artefact qui date de l’époque où le C n’était pas standardisé (mais
+  qui est encore valide aujourd’hui pour cause de compatibilité). On parle
+  de <em>C pré‑ANSI</em> ou de <em>C K&amp;R</em>. Nombre d’entre vous
+  connaissent cette syntaxe :
+</p>
+
+    <figure class="code">
+      <figcaption>C standard</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="rouge-code"><pre><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="cm">/* Do something. */</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Et bien en style <em>K&amp;R</em>, on peut faire ça :</p>
+
+    <figure class="code">
+      <figcaption>C K&amp;R</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="rouge-code"><pre><span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">)</span> <span class="kt">int</span> <span class="n">argc</span><span class="p">;</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">;</span>
+<span class="p">{</span>
+    <span class="cm">/* Do something. */</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Oui c’est moche, mais le pire est à venir…</p>
+
+<h2>Pourquoi c’est mal ?</h2>
+
+<p>Comme un bout de code vaut mieux qu’un long discours.</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+</pre></td><td class="rouge-code"><pre><span class="kt">void</span> <span class="n">foo</span><span class="p">(</span><span class="n">bar</span><span class="p">,</span> <span class="n">baz</span><span class="p">,</span> <span class="n">qux</span><span class="p">)</span> <span class="kt">int</span> <span class="n">bar</span><span class="p">;</span> <span class="kt">char</span> <span class="n">baz</span><span class="p">;</span> <span class="kt">int</span><span class="o">*</span> <span class="n">qux</span><span class="p">;</span>
+<span class="p">{</span>
+    <span class="cm">/* Do something. */</span>
+<span class="p">}</span>
+
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">foo</span><span class="p">(</span><span class="mi">42</span><span class="p">,</span> <span class="s">"foobarbazqux"</span><span class="p">,</span> <span class="mi">1024</span><span class="p">.</span><span class="mi">8</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Et oui, ce truc passe sans aucun souci et sans aucun avertissement du
+  compilateur (je lui passe quand même un flottant en tant qu’adresse et une
+  chaîne de caractères en tant que caractère !!!). Oui, vous avez bien lu, même
+  un <code>gcc -ansi -pedantic -Wall -Wextra</code> laisse passer ça sans
+  broncher. Pour les utilisateurs de clang, j’en ai autant à leur service
+  <code>clang -ansi -pedantic</code> ne l’ouvre pas plus que
+  gcc<sup id="fnref:1"><a href="#fn:1">1</a></sup>.
+  Pire, je n’ai même pas réussi à le faire couiner là-dessus (mais ça vient
+  peut-être aussi de moi, je suis novice en ce qui concerne clang), alors que
+  gcc avec un <code>‑Wstrict‑prototypes</code> ou un
+  <code>‑Wold‑style‑definition</code> vous avertit comme il se doit.
+</p>
+
+<p>Si on essaye le même code avec une déclaration comme on les aime :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+</pre></td><td class="rouge-code"><pre><span class="kt">void</span> <span class="nf">foo</span><span class="p">(</span><span class="kt">int</span> <span class="n">bar</span><span class="p">,</span> <span class="kt">char</span> <span class="n">baz</span><span class="p">,</span> <span class="kt">int</span><span class="o">*</span> <span class="n">qux</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="cm">/* Do something. */</span>
+<span class="p">}</span>
+
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">foo</span><span class="p">(</span><span class="mi">42</span><span class="p">,</span> <span class="s">"foobarbazqux"</span><span class="p">,</span> <span class="mi">1024</span><span class="p">.</span><span class="mi">8</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Là, le compilateur nous jette (avec des erreurs, pas seulement des
+  avertissements) sans ajouter une seule option (même gcc le laxiste ne laisse
+  pas passer une adresse flottante ^^).
+</p>
+
+<h2>Mais c’est quoi la différence ?</h2>
+
+<p>
+  Certains connaissent sûrement déjà cette notation, mais combien savent qu’il y
+  a une grande différence entre les deux ?
+</p>
+
+<p>
+ <a href="/static/misc/normeC99.pdf">La norme</a>
+ (<em>ISO/IEC 9899:TC3</em>, 6.9.1 Function definitions, page 155) nous dit :
+</p>
+
+<blockquote>
+  <pre>
+extern int max(int a, int b)
+{
+    return a > b ? a : b;
+}
+[…]
+extern int max(a, b)
+int a, b;
+{
+    return a > b ? a : b;
+}
+  </pre>
+  <p>
+    Here int a, b; is the declaration list for the parameters. The difference
+    between these two definitions is that the first form acts as a prototype
+    declaration that forces conversion of the arguments of subsequent calls to
+    the function, whereas the second form does not.
+  </p>
+  <footer>
+    <strong>ISO/IEC 9899:TC3</strong>
+    <cite>
+      <a href='http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1256.pdf'>www.open-std.org/jtc1/sc22/wg14/www/docs/n1256</a>
+    </cite>
+  </footer>
+</blockquote>
+
+
+<p>
+  Ce qui signifie que les déclarations style <em>K&amp;R</em> ne force pas la
+  conversion, quel que soit les types en jeu. Et c’est ce comportement qui
+  empêche de détecter les erreurs à la compilation.
+</p>
+
+<h2>Pourquoi j’en parle ?</h2>
+
+<p>
+  Bah oui tiens, pourquoi j’en parle ? Après tout c’est vieux ce truc, cela date
+  d’avant le C89 donc on s’en fiche, on ne le verra plus. Si seulement…
+</p>
+
+<p>
+  Il y a encore des gens qui utilisent ce style de déclaration (malgré ses
+  défauts évidents) donc vous risquez de le croiser tôt ou tard. Alors, autant
+  savoir ce que ça signifie et à quel point c’est foireux également (des fois
+  que vous puissiez modifier le code en question, ça pourrait être une bonne
+  chose à faire).
+</p>
+
+<p>
+  Bon, je conclurai en collant un gros carton rouge à
+  <a href="https://svnweb.freebsd.org/base/stable/9/lib/libc/stdlib/getopt.c?view=markup">FreeBSD</a>
+  qui a des trucs dans ce genre dans son code. <em>No comment…</em>
+</p>
+
+<div class="footnotes">
+  <hr class="weak-hr" />
+  <ol>
+    <li id="fn:1">
+      <p>
+        Maintenant (2013/09/01), même sans options, clang émet un warning (pour
+        la chaîne de caractères en tant que <code>char</code>) et une erreur
+        (pour le <code>float</code> en tant qu’adresse). gcc ne signale toujours
+        rien si l’on n’utilise pas explicitement les bonnes options. De manière
+        générale, clang (et LLVM) a fait de gros progrès ces dernières
+        années. <a href="#fnref:1">>↩</a>
+      </p>
+    </li>
+  </ol>
+</div>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2011-02-27T00:00:00Z"
+            itemprop="datePublished">
+        2011-02-27
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#c" rel="tag">C</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

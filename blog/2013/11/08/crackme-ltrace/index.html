@@ -1,0 +1,250 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Crackme — ltrace — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2013/11/08/crackme-ltrace/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Crackme — ltrace</h1>
+
+  <p>
+  Le <em>crackme</em> étudié dans cet article provient
+  d’<a href="https://www.root-me.org/fr/Challenges/Cracking/ELF-x86-Fake-Instructions">ici</a>.
+</p>
+
+<p>
+  Avec ce troisième <em>crackme</em>, on reste dans du très simple mais ça va
+  nous permettre de voir une nouvelle approche lorsque l’on veut faire de la
+  rétroingénierie sur des exécutables dynamiques.
+</p>
+
+<p>Bon, déjà voyons à quoi nous avons à faire.</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% ./crackme
+(*) -Syntaxe: ./crackme03 [password]
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Ok, celui-ci prend le mot de passe via les arguments de la ligne de commande.
+</p>
+
+<p>
+  Commençons par le traditionnel <code>strings</code> qui, comme on pouvait s’y
+  attendre, ne nous apprend pas grand-chose.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% strings crackme
+/lib/ld-linux.so.2
+__gmon_start__
+libc.so.6
+_IO_stdin_used
+strcpy
+exit
+puts
+__stack_chk_fail
+printf
+memcpy
+malloc
+strcmp
+__libc_start_main
+GLIBC_2.4
+GLIBC_2.0
+PTRh0
+QVhT
+libe
+_0cG
+jc5m
+_.5T
+[^_]
+(*) -Syntaxe: %s [password] 
+_0cGj35m9V5T3
+8CJ0
+9H95h3xdh
+_Celebration
+rification de votre mot de passe..
+(!) L'authentification a 
+chou
+ Try again ! 
+'+) Authentification r
+ussie...
+ U'r root! 
+ sh 3.0 # password: %s
+le voie de la sagesse te guidera, tache de trouver le mot de passe petit padawaan 
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Il y a bien quelques chaînes qui ressemblent vaguement à un mot de passe, mais
+  aucune ne fonctionne.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% ./crackme _0cGj35m9V5T3
+Vérification de votre mot de passe..
+le voie de la sagesse te guidera, tache de trouver le mot de passe petit padawaan 
+% ./crackme 9H95h3xdh
+Vérification de votre mot de passe..
+le voie de la sagesse te guidera, tache de trouver le mot de passe petit padawaan 
+</pre>
+      </div>
+    </figure>
+
+
+<p>Voyons à quel type de binaire nous avons là :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>crackme03: ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), dynamically linked (uses shared libs), for GNU/Linux 2.6.8, not stripped
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Hum, intéressant : cet exécutable est lié dynamiquement. Voyons donc ce que
+  nous donne un petit <a href="https://linux.die.net/man/1/ltrace">ltrace</a> :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% ltrace ./crackme AAAAAAAA
+__libc_start_main(0x8048554, 2, 0xbfa5d744, 0x8048840, 0x8048830 &lt;unfinished ...&gt;
+malloc(29)                                                                                                     = 0x09a6d008
+memcpy(0x09a6d008, "_0cGj35m9V5T3\303\2078CJ0\303\2009H95h3xdh", 31)                                           = 0x09a6d008
+memcpy(0xbfa5d60a, "_Celebration", 13)                                                                         = 0xbfa5d60a
+strcpy(0xbfa5d66e, "AAAAAAAA")                                                                                 = 0xbfa5d66e
+puts("V\303\251rification de votre mot de pa"...Vérification de votre mot de passe..
+)                                                              = 38
+strcmp("AAAAAAAA", "_0cGjc5m_.5\r\n\303\2078CJ0\303\2009")                                                     = -1
+printf("le voie de la sagesse te guidera"...le voie de la sagesse te guidera, tache de trouver le mot de passe petit padawaan 
+)                                                                  = 84
+exit(0  &lt;unfinished ...&gt;
++++ exited (status 0) +++
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Hum, c’est très instructif. On voit que le code fait un <code>strcmp</code>
+  contre une chaîne un peu bizarre. Essayons d’utiliser cette chaîne bizarre en
+  tant que mot de passe. Étant donné que la chaîne contient la séquence de
+  caractères de contrôles <code>\r\n</code>, je préfère utiliser Ruby pour
+  passer la chaîne en argument (d’autres solutions étaient bien sûr possible)
+  plutôt que d’essayer de la taper directement dans le shell.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% ./crackme "$(ruby -e 'print("_0cGjc5m_.5\r\n\303\2078CJ0\303\2009")')"
+Vérification de votre mot de passe..
+'+) Authentification réussie...
+ U'r root! 
+
+  sh 3.0 # password: liberté!
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Gagné !
+  <br />
+  Le mot de passe est donc liberté!.
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2013-11-08T00:00:00Z"
+            itemprop="datePublished">
+        2013-11-08
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#rétroingénierie" rel="tag">Rétroingénierie</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

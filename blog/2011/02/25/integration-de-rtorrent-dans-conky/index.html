@@ -1,0 +1,249 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Intégration de rtorrent dans conky — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2011/02/25/integration-de-rtorrent-dans-conky/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Intégration de rtorrent dans conky</h1>
+
+  <p><em>Cet article provient de mon ancien site Internet.</em></p>
+
+<h2>Background</h2>
+
+<p>
+  À l’époque où j’utilisais conky, j’ai voulu intégrer le monitoring de
+  rtorrent. Les ressources à ce sujet ne manquent pas sur le Web, mais je n’ai
+  pas trouvé de client qui me convienne vraiment. J’ai donc écrit le mien (en
+  Perl, seul langage de script que je maîtrise, en attendant de me pencher
+  sérieusement sur Python ou Ruby un de ces jours…).
+</p>
+
+<p>Voilà une capture d’écran du résultat final :</p>
+
+<p>
+  <img src="/static/images/stats-rtorrent.png" class="centered" title="Statistiques de rtorrent dans conky" alt="Statistiques de rtorrent dans conky">
+</p>
+
+<h2>La configuration de rtorrent</h2>
+
+<p>
+  Bon là c’est très simple, il n’y a qu’une ligne à ajouter au fichier
+  <code>.rtorrentrc</code>.
+</p>
+
+    <figure class="code">
+      <figcaption>.rtorrentrc</figcaption>
+      <div class="highlight">
+        <pre>scgi_port = localhost:4200
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Là j’ai pris le port 4200 pour l’exemple, mais vous pouvez en choisir un autre
+  si ça vous chante.
+</p>
+
+<p>
+  <strong>Attention</strong> : rtorrent doit avoir été compilé avec le
+  flag <code>--with-xmlrpc-c</code>.
+</p>
+
+<h2>Le serveur XML-RPC</h2>
+
+<p>
+  Ici le prérequis est d’avoir un serveur HTTP fonctionnel. Utilisant
+  personnellement lighttpd j’expliquerai la configuration pour ce dernier (tout
+  se passe dans le fichier <code>lighttpd.conf</code>). Pour ceux qui utilisent
+  un autre serveur (Apache, nginx, …), reportez-vous à sa documentation (ou
+  jetez un œil
+  <a href="https://web.archive.org/web/20110724183709/http://libtorrent.rakshasa.no/wiki/RTorrentXMLRPCGuide">ici</a>).
+</p>
+
+<p>
+  Il faut commencer par activer (donc décommenter la ligne correspondante ou
+  l’ajouter si elle n’est pas présente), si ce n’est pas déjà fait, le module
+  <code>mod_scgi</code> dans la section <code>server.modules</code>
+</p>
+
+<p>
+  Ensuite, il ne reste plus qu’à créer le serveur XML-RPC en ajoutant cette
+  section.
+</p>
+
+    <figure class="code">
+      <figcaption>lighttpd.conf</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+</pre></td><td class="rouge-code"><pre>$HTTP["url"] == "/RPC2" {
+    scgi.server = °(
+        "/RPC2" =&gt;
+            ( "127.0.0.1" =&gt;
+                (
+                    "host"         =&gt; "127.0.0.1",
+                     "port"        =&gt; 4200,
+                     "check-local" =&gt; "disable",
+                )
+            )
+        )
+    accesslog.filename = "/dev/null"
+}
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  La directive <code>accesslog.filename = "/dev/null"</code> permet d’éviter un
+  pourrissage en règle des logs par les requêtes incessantes de notre client. Il
+  faut également veiller à indiquer le même port que dans le
+  fichier <code>.rtorrentrc</code>.
+  Pour connaître plus en détail la signification des options utilisées, je vous
+  renvoie sur
+  <a href="https://redmine.lighttpd.net/projects/lighttpd/wiki/Docs_ModFastCGI">la doc</a>
+  (qui est plutôt bien faite).
+</p>
+
+<p>Redémarrez le serveur, et c’est parti !</p>
+
+<h2>Le client</h2>
+
+<p>
+  Comme dit précedemment, j’ai écris le client en Perl. J’utilise le module
+  <code>Frontier::Client</code> (disponible sur le
+  <a href="https://metacpan.org/release/RTFIREFLY/Frontier-RPC-0.07b4p1/view/lib/Frontier/Client.pm">CPAN</a>
+  ) pour envoyer mes requêtes au serveur.
+</p>
+
+<p>
+  Le fonctionnement est très simple. Je commence par vérifier que rtorrent et le
+  serveur sont lancés. Ensuite, je me connecte et je balance les requêtes qui
+  vont bien en fonction des statistiques que je veux récupérer. La liste des
+  commandes disponibles
+  est <a href="https://web.archive.org/web/20110301110638/http://libtorrent.rakshasa.no/wiki/RTorrentCommandsRaw">ici</a>.
+</p>
+
+<p>
+  Pour que le script fonctionne, il faut bien sûr modifier la constante
+  <em>server</em> pour y mettre l’adresse de votre serveur XML-RPC. Vous pouvez
+  aussi modifier les couleurs et les paliers à partir desquels les couleurs
+  changent. Le script est assez court et j’ai essayé de le garder un maximum
+  lisible (même pour du Perl :p) donc je pense que les parties à modifier sont
+  assez évidentes.
+</p>
+
+<p>Pour récupérer le client, c’est par
+<a href="/static/code/conky-rtorrent/rtorrent-stats.pl">ici</a>.
+
+<h2>conky</h2>
+
+<p>Et enfin conky. C’est vraiment trivial : un simple <code>execpi</code>.</p>
+
+    <figure class="code">
+      <figcaption>conkyrc</figcaption>
+      <div class="highlight">
+        <pre>${execpi 5 rtorrent-stats}
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Pour un exemple de <code>conkyrc</code> c’est par
+  <a href="/static/code/conky-rtorrent/rtorrent.conkyrc">là</a>
+  (rien de bien sorcier comme je vous l’avais dit).
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2011-02-25T00:00:00Z"
+            itemprop="datePublished">
+        2011-02-25
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#trucs-et-astuces" rel="tag">Trucs et Astuces</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

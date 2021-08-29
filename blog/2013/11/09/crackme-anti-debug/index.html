@@ -1,0 +1,520 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Crackme — Anti-Debug — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2013/11/09/crackme-anti-debug/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Crackme — Anti-Debug</h1>
+
+  <p>
+  Le <em>crackme</em> étudié dans cet article provient
+  d’<a href="https://www.root-me.org/fr/Challenges/Cracking/ELF-x86-Ptrace">ici</a>.
+</p>
+
+<p>
+  Quatrième <em>crackme</em>, et cette fois nous allons rencontrer notre premier
+  mécanisme anti-débogueur.
+</p>
+
+<p>
+  Nous avons donc à faire à un exécutable statique avec un <code>strings</code>
+  de 2069 lignes qui ne contient pas de mot de passe (cette fois j’ai vérifié
+  ^^")
+</p>
+
+<p>
+  Ok, sortons le débogueur (comme pour le <em>crackme</em> 2, sauf que cette
+  fois c’est justifié :-P). Mais avant cela, voyons d’abord une exécution
+  normale :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>############################################################
+##        Bienvennue dans ce challenge de cracking        ##
+############################################################
+
+Password : AAAAAAAA
+
+Wrong password.
+</pre>
+      </div>
+    </figure>
+
+
+<p>Maintenant, avec notre ami GDB :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) r
+Starting program: /home/slaperche/Téléchargements/crackme/ch3.bin 
+Debugger detecté ... Exit
+[Inferior 1 (process 5244) exited with code 01]
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Hoho, voyez-vous ça ? Monsieur n’aime pas être surveillé. Bon, on va y aller
+  un peu plus doucement cette fois :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) b main
+Breakpoint 1 at 0x80483fe
+(gdb) r
+Starting program: /home/slaperche/Téléchargements/crackme/ch3.bin 
+
+Breakpoint 1, 0x080483fe in main ()
+(gdb) disass
+Dump of assembler code for function main:
+   0x080483f0 &lt;+0&gt;:     lea    0x4(%esp),%ecx
+   0x080483f4 &lt;+4&gt;:     and    $0xfffffff0,%esp
+   0x080483f7 &lt;+7&gt;:     pushl  -0x4(%ecx)
+   0x080483fa &lt;+10&gt;:    push   %ebp
+   0x080483fb &lt;+11&gt;:    mov    %esp,%ebp
+   0x080483fd &lt;+13&gt;:    push   %ecx
+=&gt; 0x080483fe &lt;+14&gt;:    sub    $0x14,%esp
+   0x08048401 &lt;+17&gt;:    movl   $0x80c2888,-0xc(%ebp)
+   0x08048408 &lt;+24&gt;:    push   $0x0
+   0x0804840a &lt;+26&gt;:    push   $0x1
+   0x0804840c &lt;+28&gt;:    push   $0x0
+   0x0804840e &lt;+30&gt;:    push   $0x0
+   0x08048410 &lt;+32&gt;:    call   0x8058a70 &lt;ptrace&gt;
+   0x08048415 &lt;+37&gt;:    add    $0x10,%esp
+   0x08048418 &lt;+40&gt;:    test   %eax,%eax
+   0x0804841a &lt;+42&gt;:    jns    0x8048436 &lt;main+70&gt;
+   0x0804841c &lt;+44&gt;:    sub    $0xc,%esp
+   0x0804841f &lt;+47&gt;:    push   $0x80c2894
+   0x08048424 &lt;+52&gt;:    call   0x80492d0 &lt;puts&gt;
+   0x08048429 &lt;+57&gt;:    add    $0x10,%esp
+   0x0804842c &lt;+60&gt;:    mov    $0x1,%eax
+   0x08048431 &lt;+65&gt;:    jmp    0x80484f9 &lt;main+265&gt;
+   0x08048436 &lt;+70&gt;:    sub    $0xc,%esp
+   0x08048439 &lt;+73&gt;:    push   $0x80c28b0
+   0x0804843e &lt;+78&gt;:    call   0x80492d0 &lt;puts&gt;
+   0x08048443 &lt;+83&gt;:    add    $0x10,%esp
+   0x08048446 &lt;+86&gt;:    sub    $0xc,%esp
+   0x08048449 &lt;+89&gt;:    push   $0x80c28f0
+   0x0804844e &lt;+94&gt;:    call   0x80492d0 &lt;puts&gt;
+   0x08048453 &lt;+99&gt;:    add    $0x10,%esp
+   0x08048456 &lt;+102&gt;:   sub    $0xc,%esp
+   0x08048459 &lt;+105&gt;:   push   $0x80c2930
+   0x0804845e &lt;+110&gt;:   call   0x80492d0 &lt;puts&gt;
+   0x08048463 &lt;+115&gt;:   add    $0x10,%esp
+   0x08048466 &lt;+118&gt;:   mov    $0x80c296e,%eax
+   0x0804846b &lt;+123&gt;:   sub    $0xc,%esp
+   0x0804846e &lt;+126&gt;:   push   %eax
+   0x0804846f &lt;+127&gt;:   call   0x8048f60 &lt;printf&gt;
+   0x08048474 &lt;+132&gt;:   add    $0x10,%esp
+   0x08048477 &lt;+135&gt;:   mov    0x80e549c,%eax
+   0x0804847c &lt;+140&gt;:   sub    $0x4,%esp
+   0x0804847f &lt;+143&gt;:   push   %eax
+   0x08048480 &lt;+144&gt;:   push   $0x9
+   0x08048482 &lt;+146&gt;:   lea    -0x16(%ebp),%eax
+   0x08048485 &lt;+149&gt;:   push   %eax
+   0x08048486 &lt;+150&gt;:   call   0x8048f90 &lt;fgets&gt;
+   0x0804848b &lt;+155&gt;:   add    $0x10,%esp
+   0x0804848e &lt;+158&gt;:   lea    0x8048497,%eax
+   0x08048494 &lt;+164&gt;:   inc    %eax
+   0x08048495 &lt;+165&gt;:   jmp    *%eax
+   0x08048497 &lt;+167&gt;:   mov    $0x8bea558a,%eax
+   0x0804849c &lt;+172&gt;:   inc    %ebp
+   0x0804849d &lt;+173&gt;:   hlt    
+   0x0804849e &lt;+174&gt;:   add    $0x4,%eax
+   0x080484a1 &lt;+177&gt;:   mov    (%eax),%al
+   0x080484a3 &lt;+179&gt;:   cmp    %al,%dl
+   0x080484a5 &lt;+181&gt;:   jne    0x80484e4 &lt;main+244&gt;
+   0x080484a7 &lt;+183&gt;:   mov    -0x15(%ebp),%dl
+   0x080484aa &lt;+186&gt;:   mov    -0xc(%ebp),%eax
+   0x080484ad &lt;+189&gt;:   add    $0x5,%eax
+   0x080484b0 &lt;+192&gt;:   mov    (%eax),%al
+   0x080484b2 &lt;+194&gt;:   cmp    %al,%dl
+   0x080484b4 &lt;+196&gt;:   jne    0x80484e4 &lt;main+244&gt;
+   0x080484b6 &lt;+198&gt;:   mov    -0x14(%ebp),%dl
+   0x080484b9 &lt;+201&gt;:   mov    -0xc(%ebp),%eax
+   0x080484bc &lt;+204&gt;:   inc    %eax
+   0x080484bd &lt;+205&gt;:   mov    (%eax),%al
+   0x080484bf &lt;+207&gt;:   cmp    %al,%dl
+   0x080484c1 &lt;+209&gt;:   jne    0x80484e4 &lt;main+244&gt;
+   0x080484c3 &lt;+211&gt;:   mov    -0x13(%ebp),%dl
+   0x080484c6 &lt;+214&gt;:   mov    -0xc(%ebp),%eax
+   0x080484c9 &lt;+217&gt;:   add    $0xa,%eax
+   0x080484cc &lt;+220&gt;:   mov    (%eax),%al
+   0x080484ce &lt;+222&gt;:   cmp    %al,%dl
+   0x080484d0 &lt;+224&gt;:   jne    0x80484e4 &lt;main+244&gt;
+   0x080484d2 &lt;+226&gt;:   sub    $0xc,%esp
+   0x080484d5 &lt;+229&gt;:   push   $0x80c297a
+   0x080484da &lt;+234&gt;:   call   0x80492d0 &lt;puts&gt;
+   0x080484df &lt;+239&gt;:   add    $0x10,%esp
+   0x080484e2 &lt;+242&gt;:   jmp    0x80484f4 &lt;main+260&gt;
+   0x080484e4 &lt;+244&gt;:   sub    $0xc,%esp
+   0x080484e7 &lt;+247&gt;:   push   $0x80c298e
+   0x080484ec &lt;+252&gt;:   call   0x80492d0 &lt;puts&gt;
+   0x080484f1 &lt;+257&gt;:   add    $0x10,%esp
+   0x080484f4 &lt;+260&gt;:   mov    $0x0,%eax
+   0x080484f9 &lt;+265&gt;:   mov    -0x4(%ebp),%ecx
+   0x080484fc &lt;+268&gt;:   leave  
+   0x080484fd &lt;+269&gt;:   lea    -0x4(%ecx),%esp
+   0x08048500 &lt;+272&gt;:   ret    
+End of assembler dump.
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Tiens, tiens, mais que vois-je ? Un appel à
+  <a href="https://linux.die.net/man/2/ptrace">ptrace</a> à l’adresse
+  0x08048410. Il faut savoir que, sous Linux du moins, <code>ptrace</code> est
+  l’appel système à la base des débogueurs. Il permet de mettre en pause un
+  programme, de faire du pas à pas, de lire et écrire sa mémoire et ses
+  registres. Il permet également de détecter si un programme est sous la
+  surveillance de <code>ptrace</code> (et donc, potentiellement sour la
+  surveillance d’un débogueur). Et c’est ce qui est fait ici. Le code :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>   0x08048408 &lt;+24&gt;:    push   $0x0
+   0x0804840a &lt;+26&gt;:    push   $0x1
+   0x0804840c &lt;+28&gt;:    push   $0x0
+   0x0804840e &lt;+30&gt;:    push   $0x0
+   0x08048410 &lt;+32&gt;:    call   0x8058a70 &lt;ptrace&gt;
+</pre>
+      </div>
+    </figure>
+
+
+<p>correspond à :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre><span class="n">ptrace</span><span class="p">(</span><span class="n">PTRACE_TRACEME</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</pre>
+      </div>
+    </figure>
+
+
+<p>Qui permet de savoir si le processus courant est sous surveillance.</p>
+
+<p>
+  Maintenant que l’on sait comment le binaire se défend, nous allons pouvoir
+  contourner cette protection. Pour cela, nous pouvons placer un point d’arrêt
+  sur l’instruction qui teste la valeur de retour de <code>ptrace</code> et la
+  changer (sachant que l’appel renvoi -1 si le processus est tracé et 0 si ce
+  n’est pas le cas) avant de continuer l’exécution.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) b *0x08048418
+Breakpoint 2 at 0x8048418
+(gdb) c
+Continuing.
+
+Breakpoint 2, 0x08048418 in main ()
+(gdb) set $eax = 0
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Avant de continuer, regardons le code de plus près. Bon déjà, il n’y a pas
+  d’appel à <code>strcmp</code>. Cependant, en examinant le code avec attention
+  on remarque cette partie :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>   0x0804849e &lt;+174&gt;:   add    $0x4,%eax
+   0x080484a1 &lt;+177&gt;:   mov    (%eax),%al
+   0x080484a3 &lt;+179&gt;:   cmp    %al,%dl
+   0x080484a5 &lt;+181&gt;:   jne    0x80484e4 &lt;main+244&gt;
+   0x080484a7 &lt;+183&gt;:   mov    -0x15(%ebp),%dl
+   0x080484aa &lt;+186&gt;:   mov    -0xc(%ebp),%eax
+   0x080484ad &lt;+189&gt;:   add    $0x5,%eax
+   0x080484b0 &lt;+192&gt;:   mov    (%eax),%al
+   0x080484b2 &lt;+194&gt;:   cmp    %al,%dl
+   0x080484b4 &lt;+196&gt;:   jne    0x80484e4 &lt;main+244&gt;
+   0x080484b6 &lt;+198&gt;:   mov    -0x14(%ebp),%dl
+   0x080484b9 &lt;+201&gt;:   mov    -0xc(%ebp),%eax
+   0x080484bc &lt;+204&gt;:   inc    %eax
+   0x080484bd &lt;+205&gt;:   mov    (%eax),%al
+   0x080484bf &lt;+207&gt;:   cmp    %al,%dl
+   0x080484c1 &lt;+209&gt;:   jne    0x80484e4 &lt;main+244&gt;
+   0x080484c3 &lt;+211&gt;:   mov    -0x13(%ebp),%dl
+   0x080484c6 &lt;+214&gt;:   mov    -0xc(%ebp),%eax
+   0x080484c9 &lt;+217&gt;:   add    $0xa,%eax
+   0x080484cc &lt;+220&gt;:   mov    (%eax),%al
+   0x080484ce &lt;+222&gt;:   cmp    %al,%dl
+   0x080484d0 &lt;+224&gt;:   jne    0x80484e4 &lt;main+244&gt;
+</pre>
+      </div>
+    </figure>
+
+
+<p>Tiens tiens, on dirait bien qu’il y a un <em>pattern</em> ici :</p>
+
+<ul>
+  <li>
+    on charge un octet dans <code>dl</code>
+  </li>
+  <li>
+    on charge une valeur dans <code>eax</code>
+  </li>
+  <li>
+    on fait une opération arithmétique sur <code>eax</code> (<code>add</code>
+    ou <code>inc</code>)
+  </li>
+  <li>
+    on ramène <code>eax</code> sur un octet.
+  </li>
+  <li>
+    on compare <code>al</code> avec <code>dl</code>
+  </li>
+  <li>
+    on saute à l’adresse 0x80484e4 si la comparaison précédente génère un
+    résultat différent de 0 (ce qui signifie que les deux opérandes étaient
+    différents).
+  </li>
+</ul>
+
+<p>
+  Cela ressemble étrangement à une boucle (boucle déroulée certes, mais boucle
+  quand même) pour comparer deux chaînes de caractères. Et comme
+  ce <em>pattern</em> se répète quatre fois, on pourrait émettre l’hypothèse que
+  le mot de passe recherché a une longueur de 4 caractères.
+</p>
+
+<p>
+  Vérifions nos hypothèses en examinant les valeurs de <code>al</code>
+  et <code>dl</code> à chaque <code>cmp</code>. Commençons par poser un point
+  d’arrêt sur le premier <code>cmp</code>.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) b *0x080484a3
+Breakpoint 3 at 0x80484a3
+(gdb) c
+Continuing.
+############################################################
+##        Bienvennue dans ce challenge de cracking        ##
+############################################################
+
+Password : AAAA
+
+Breakpoint 3, 0x080484a3 in main ()
+(gdb) p (char)$al
+$1 = 101 'e'
+(gdb) p (char)$dl
+$2 = 65 'A'
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Ok, <code>dl</code> semble contenir notre chaîne (on reconnaît notre A), c’est
+  donc <code>al</code> qui va contenir les caractères du mot de passe à trouver
+  (le premier caractère du mot de passe est donc <code>e</code>).
+</p>
+
+<p>
+  Bien, maintenant que l’on sait quel registre surveiller, continuons avec les
+  autres <code>cmp</code>. Mais avant cela, il va falloir bidouiller un peu. Et
+  oui, le <code>cmp</code> ne va pas produire le résultat attendu et la
+  prochaine instruction va nous faire sauter (ce qui va nous empêcher d’analyser
+  les autres <code>cmp</code>). La prochaine instruction est un <code>jne</code>
+  ce qui signifie <em>Jump if Not Equal</em>, qui est le parfait équivalent de
+  l’instruction <code>jnz</code> (qui signifie <em>Jump if Not Zero</em>). Or le
+  second nom (<code>jnz</code>) nous met la puce à l’oreille : cette instruction
+  se base sur la valeur du flag <code>z</code>. Pour éviter le saut, il va donc
+  falloir mettre ce flag à 1 après l’instruction <code>cmp</code>.
+  <br />
+  Allons-y :
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) ni
+0x080484a5 in main ()
+(gdb) p $eflags
+$3 = [ CF AF SF IF ]
+(gdb) set $eflags = $eflags | 64
+(gdb) p $eflags
+$4 = [ CF AF ZF SF IF ]
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Et voilà, le flag <code>z</code> est positionné (il y a peut-être une syntaxe
+  plus simple pour faire ça, mais je n’ai pas trouvé). D’où sort le 64 ? Et bien
+  c’est tout simple : d’après
+  <a href="https://en.wikipedia.org/wiki/FLAGS_register_%28computing%29">cette page</a>,
+  le flag <code>z</code> correspond au bit 6, et comme chacun sait 2<sup>6</sup>
+  = 64. S’en suit un petit OU bit à bit pour positionner le flag voulu. Et voilà
+  le travail.
+</p>
+
+<p>Allez, continuons et découvrons ce fichu mot de passe :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>(gdb) b *0x080484b2
+Breakpoint 4 at 0x80484b2
+(gdb) c
+Continuing.
+
+Breakpoint 4, 0x080484b2 in main ()
+(gdb) p (char)$al
+$5 = 97 'a'
+(gdb) ni
+0x080484b4 in main ()
+(gdb) set $eflags = $eflags | 64
+(gdb) b *0x080484bf
+Breakpoint 5 at 0x80484bf
+(gdb) c
+Continuing.
+
+Breakpoint 5, 0x080484bf in main ()
+(gdb) p (char)$al
+$6 = 115 's'
+(gdb) ni
+0x080484c1 in main ()
+(gdb) set $eflags = $eflags | 64
+(gdb) b *0x080484ce
+Breakpoint 6 at 0x80484ce
+(gdb) c
+Continuing.
+
+Breakpoint 6, 0x080484ce in main ()
+(gdb) p (char)$al
+$7 = 121 'y'
+</pre>
+      </div>
+    </figure>
+
+
+<p>Ok, le mot de passe serait donc easy.</p>
+
+<p>Voyons voir :</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>% ./ch3.bin
+############################################################
+##        Bienvennue dans ce challenge de cracking        ##
+############################################################
+
+Password : easy
+
+Good password !!!
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Gagné !
+  <br />
+  Ça commence à devenir intéressant :-)
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2013-11-09T00:00:00Z"
+            itemprop="datePublished">
+        2013-11-09
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#rétroingénierie" rel="tag">Rétroingénierie</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

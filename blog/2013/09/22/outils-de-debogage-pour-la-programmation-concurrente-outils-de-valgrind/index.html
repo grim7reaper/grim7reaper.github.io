@@ -1,0 +1,408 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Outils de débogage pour la programmation concurrente — Outils de Valgrind — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2013/09/22/outils-de-debogage-pour-la-programmation-concurrente-outils-de-valgrind/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Outils de débogage pour la programmation concurrente — Outils de Valgrind</h1>
+
+  <p>
+  <em>
+    Les logiciels présentés ici ont été testés au mois d’août 2012, il est
+    probable que certaines informations au niveau des fonctionnalités et
+    performances soient obsolètes.
+  </em>
+</p>
+
+<p>
+  Les outils qui nous intéressent ici sont Helgrind, DRD et ThreadSanitizer. Les
+  deux premiers font partie de la suite d’outils officiels de Valgrind, le
+  dernier est un nouvel outil prometteur, développé par Google.
+</p>
+
+<h2>Helgrind</h2>
+
+<p>
+  Cet outil surveille chaque zone mémoire qui est accédée par plus d’un thread
+  et vérifie à chaque fois que la cohérence des données est maintenue. Pour
+  cela, il utilise un algorithme basé sur les relations <em>Happens-Before</em>
+  (relations établissant un ordre partiel entre deux évènements). Helgrind
+  permet de détecter :
+</p>
+
+<ul>
+  <li>les situations de compétition ;</li>
+</ul>
+
+
+<p>
+  <img src="/static/images/valgrind/helgrind-race.png" class="centered" title="Détection d’une situation de compétition" alt="Détection d’une situation de compétition">
+</p>
+
+<ul>
+  <li>l’utilisation des verrous dans un ordre incohérent ;</li>
+</ul>
+
+<p>
+  <img src="/static/images/valgrind/helgrind-order.png" class="centered" title="Détection d’un ordre de verrouillage incohérent" alt="Détection d’un ordre de verrouillage incohérent">
+</p>
+
+<ul>
+  <li>
+    la mauvaise utilisation de l’API POSIX pour les threads (<em>pthreads</em>).
+  </li>
+</ul>
+
+
+<p>
+  Il est intéressant de noter qu’il peut aussi fonctionner avec les programmes
+  utilisant OpenMP (une API permettant de faciliter la création de programmes
+  réalisant des calculs parallèles sur des architectures à mémoire partagée) et
+  Qt4 (Qt4 utilise sa propre implémentation des mutex : les QMutex). Enfin, il
+  fonctionne avec les mutex POSIX implémentés par Linux, Darwin (le noyau de
+  MacOS) et Android.
+</p>
+
+<h2>DRD</h2>
+
+<p>C’est un outil qui a de nombreux points communs avec Helgrind.</p>
+
+<ul>
+  <li>
+    utilisation d’un algorithme basé sur les relations <em>Happens-Before</em> ;
+  </li>
+  <li>
+    détection des situations de compétition ;
+  </li>
+</ul>
+
+<p>
+  <img src="/static/images/valgrind/drd-race.png" class="centered" title="Détection d’un ordre de verrouillage incohérent" alt="Détection d’un ordre de verrouillage incohérent">
+</p>
+
+<ul>
+  <li>détection des erreurs d’utilisation de l’API POSIX ;</li>
+</ul>
+
+<p>
+  <img src="/static/images/valgrind/drd-API.png" class="centered" title="Détection d’un mauvaise usage de l’API POSIX pthreads" alt="Détection d’un mauvaise usage de l’API POSIX pthreads">
+</p>
+
+<ul>
+  <li>support d’OpenMP et de Qt4 ;</li>
+  <li>support des mutex POSIX de Linux, Darwin et Android.</li>
+</ul>
+
+<p>
+  En revanche, DRD se démarque de Helgrind par son surcoût mémoire (qui est
+  généralement moindre), son support de <em>Boost.Thread</em> et par sa capacité à
+  détecter lorsqu’un thread conserve un verrou trop longtemps et provoque alors
+  des conflits de verrouillage qui ralentissent le programme.
+</p>
+
+<p>
+  <img src="/static/images/valgrind/drd-contention.png" class="centered" title="Détection d’un verrouillage trop long" alt="Détection d’un verrouillage trop long">
+</p>
+
+<p>
+  Cependant, DRD ne permet pas de détecter les incohérences dans l’ordre
+  d’utilisation des verrous.
+</p>
+
+<h2>ThreadSanitizer</h2>
+
+<p>
+  <img src="/static/images/valgrind/tsan.png" class="centered" title="L’outil ThreadSanitizer" alt="L’outil ThreadSanitizer">
+</p>
+
+<p>
+  ThreadSanitizer, aussi appelé tsan, est un outil pour la détection des
+  situations de compétition dans les programmes C et C++. Il est développé par
+  Google. Il est écrit en C++ (Helgrind et DRD sont en C, tout comme Valgrind).
+  Il est disponible sous la forme d’un outil Valgrind (pour Linux et Mac) ou
+  basé sur le logiciel Pin (pour Windows).
+</p>
+
+<p>
+  Au niveau des fonctionnalités, il supporte les mutex POSIX de Linux, Darwin et
+  Android. Mais en ce qui concerne les détections il est plus limité que les
+  deux outils précédents car il ne détecte que les situations de compétition. En
+  revanche, il en détecte plus car il dispose de deux modes de fonctionnement :
+</p>
+
+<ol>
+  <li>
+    mode pur <em>Happens-Before</em> : identique à Helgrind et DRD ;
+  </li>
+  <li>
+    mode hybride<sup id="fnref:1"><a href="#fn:1">1</a></sup>.
+  </li>
+</ol>
+
+<p>
+  Lorsque l’on veut vérifier la justesse d’un programme concurrent il y a un
+  certain nombre d’évènements à surveiller. On peut les regrouper en trois
+  catégories :
+</p>
+
+<ol>
+  <li>
+    les évènements de synchronisation : <strong>LOCK</strong>
+    et <strong>UNLOCK</strong> ;
+  </li>
+  <li>
+    les évènements permettant d’établir les
+    relations <em>Happens-Before</em> : <strong>WAIT</strong>
+    et <strong>SIGNAL</strong> ;
+  </li>
+  <li>
+    les accès mémoire : <strong>READ</strong> et <strong>WRITE</strong>.
+  </li>
+</ol>
+
+<p>
+  Le mode hybride utilise une approche <em>LockSet</em> pour les évènements de
+  synchronisation et une approche <em>Happens-Before</em> pour le reste.
+  Le <em>LockSet</em> détecte toutes les situations de compétitions, le problème
+  c’est qu’il produit énormément de faux
+  positifs<sup id="fnref:2"><a href="#fn:2">2</a></sup> (au point d’être
+  inutilisable). L’approche <em>Happens-Before</em> ne produit pas de faux
+  positifs, mais ne détecte pas un certain nombre de situations de compétition.
+  Ce mode hybride permet donc de détecter plus de situations de compétitions
+  qu’un <em>Happens-Before</em> pur, mais produit aussi plus de faux positifs
+  (mais moins qu’un <em>LockSet</em> pur).
+</p>
+
+<p>
+  Pour remédier au problème des faux positifs, ThreadSanitizer fournit un
+  mécanisme d’annotations que l’on peut placer dans le code source afin de
+  donner des informations à l’outil d’analyse. Cela permet d’utiliser des
+  mécanismes de synchronisation sans verrous, de limiter les faux positifs et
+  d’ignorer les situations de compétitions bénignes. En étudiant les codes
+  sources, on peut noter qu’un mécanisme d’annotations similaire est maintenant
+  aussi en cours d’implémentation dans Helgrind et DRD.
+</p>
+
+<p>
+  Une chose très intéressante au niveau de ThreadSanitizer, c’est que Google est
+  en train de développer une version pour améliorer les performances. Comme
+  présenté dans l’article précédent, les méthodes d’analyses dynamiques ont un
+  impact non négligeable sur la vitesse d’exécution du programme. Pour y
+  remédier, Google met au point une version de ThreadSanitizer basée sur LLVM
+  plutôt que Valgrind<sup id="fnref:3"><a href="#fn:3">3</a></sup>. Le but ici
+  est de réaliser l’instrumentation du code lors de la compilation (et non
+  dynamiquement comme le fait Valgrind) puis de lier le code au runtime de
+  ThreadSanitizer. Cela permet un gain de performance très intéressant.
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Outil</th>
+      <th>Algorithme</th>
+      <th>Surcoût mémoire</th>
+      <th>Facteur de ralentissement</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Helgrind</td>
+      <td><em>Happens-Before</em></td>
+      <td>2x-2,5x</td>
+      <td>20x-50x</td>
+    </tr>
+    <tr>
+      <td>DRD</td>
+      <td><em>Happens-Before</em></td>
+      <td>1,1x-3,6x</td>
+      <td>20x-50x</td>
+    </tr>
+    <tr>
+      <td>ThreadSanitizer (Valgrind)</td>
+      <td><em>Happens-Before</em>/Hybride</td>
+      <td>3x-6x</td>
+      <td>5x-50x</td>
+    </tr>
+    <tr>
+      <td>ThreadSanitizer (LLVM)</td>
+      <td><em>Happens-Before</em>/Hybride</td>
+      <td>3x-6x</td>
+      <td>1,5x-2,5x</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>References</h2>
+
+<p>Les références utilisées pour ces trois articles sont les suivantes :</p>
+
+<ol>
+  <li>
+    <p>Müehlenfeld, A., and Wotawa, F.
+      <a href="/static/misc/valgrind/muehlenfeld2006.pdf">Fault detection in multi-threaded C++ server applications.</a>
+      In Proceedings of the 12th ACM SIGPLAN symposium on Principles and
+      practice of parallel programming (New York, NY, USA, 2007), PPoPP ’07,
+      ACM, pp. 142–143.
+    </p>
+  </li>
+  <li>
+    <p>
+      Nethercote, N., and Seward, J.
+      <a href="/static/misc/valgrind/valgrind2007.pdf">Valgrind: a framework for heavyweight dynamic binary instrumentation.</a>
+      In Proceedings of the 2007 ACM SIGPLAN conference on Programming language
+      design and implementation (New York, NY, USA, 2007), PLDI ’07, ACM, pp.
+      89–100.
+    </p>
+  </li>
+  <li>
+    <p>
+      Netzer, R. H., and Miller, B. P.
+      <a href="/static/misc/valgrind/what-are-race-conditions.pdf">What are race conditions ? - some issues and formalizations.</a>
+      ACM Letters on Programming Languages and Systems 1 (1992), 74–88.
+    </p>
+  </li>
+  <li>
+    <p>
+      Serebryany, K., and Iskhodzhanov, T.
+      <a href="/static/misc/valgrind/thread-sanitizer.pdf">ThreadSanitizer: data race detection in practice.</a>
+      In Proceedings of the Workshop on Binary Instrumentation and Applications
+      (New York, NY, USA, 2009), WBIA ’09, ACM, pp. 62–71.
+    </p>
+  </li>
+  <li>
+    <p>
+      Serebryany, K., Potapenko, A., Iskhodzhanov, T., and Vyukov, D.
+      <a href="/static/misc/valgrind/ThreadSanitizerLLVM.pdf">Dynamic race detection with LLVM compiler — compile-time instrumentation for ThreadSanitizer.</a>
+      In Proceedings of the Runtime Verification (2011), RV ’11, Springer, pp.
+      110–114.
+    </p>
+  </li>
+</ol>
+
+
+<h3>Mise à jour du 2013/09/22</h3>
+
+<p>
+  L’outil tsan est maintenant intégré dans Clang (au moins depuis la 3.3, via
+  l’option <code>-fsanitize=thread</code>) et GCC (depuis la 4.8, via l’option
+  <code>-fsanitize=thread</code>)
+</p>
+
+<p>
+  Un autre outil intéressant (bien qu’étant dans une catégorie un peu
+  différente), dont je n’ai pas parlé ici car je n’ai pas étudié son
+  fonctionnement : le
+  <a href="http://rts.lab.asu.edu/ReplayDebugger/">ReplayDebugger</a>, basé sur
+  GDB.
+</p>
+
+<div class="footnotes">
+  <hr class="weak-hr" />
+  <ol>
+    <li id="fn:1">
+      <p>
+        Serebryany, K., and Iskhodzhanov, T. ThreadSanitizer: data race
+        detection in practice. In Proceedings of the Workshop on Binary
+        Instrumentation and Applications (New York, NY, USA, 2009), WBIA ’09,
+        ACM, pp. 62–71.<a href="#fnref:1">↩</a>
+      </p>
+    </li>
+    <li id="fn:2">
+      <p>
+        Müehlenfeld, A., and Wotawa, F. Fault detection in multi-threaded C++
+        server applications. In Proceedings of the 12th ACM SIGPLAN symposium on
+        Principles and practice of parallel programming (New York, NY, USA,
+        2007), PPoPP ’07, ACM, pp. 142–143.<a href="#fnref:2">↩</a>
+      </p>
+    </li>
+    <li id="fn:3">
+      <p>
+        Serebryany, K., Potapenko, A., Iskhodzhanov, T., and Vyukov, D. Dynamic
+        race detection with LLVM compiler — compile-time instrumentation for
+        ThreadSanitizer. In Proceedings of the Runtime Verification (2011), RV
+        ’11, Springer, pp. 110–114.<a href="#fnref:3">↩</a>
+      </p>
+    </li>
+  </ol>
+</div>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2013-09-22T00:00:00Z"
+            itemprop="datePublished">
+        2013-09-22
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#debugging" rel="tag">Debugging</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,4 @@
+User-agent: *
+Disallow:
+
+Sitemap: https://grim7reaper.rolinh.ch/sitemap.xml

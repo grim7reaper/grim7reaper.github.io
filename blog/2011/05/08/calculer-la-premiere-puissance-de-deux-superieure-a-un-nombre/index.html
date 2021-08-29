@@ -1,0 +1,487 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Calculer la première puissance de deux supérieure à un nombre — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2011/05/08/calculer-la-premiere-puissance-de-deux-superieure-a-un-nombre/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Calculer la première puissance de deux supérieure à un nombre</h1>
+
+  <p><em>Cet article provient de mon ancien site Internet.</em></p>
+
+<h2>Introduction</h2>
+
+<p>
+  Parfois, il peut être utile d’arrondir un nombre à la puissance de 2
+  supérieure (par exemple, certaines tables de hachage sont plus efficace avec
+  une taille en puissance de 2). C’est quelque chose d’assez simple à faire, en
+  revanche pour le faire efficacement, il faut faire du touillage de bits
+  (<em>bit twiddling</em>).
+</p>
+
+<p>
+  Petite remarque importante : les fonctions suivantes seront définies, pour un
+  nombre sur <strong>N</strong> bits, sur l’intervalle ]0; 2<sup>N-1</sup>].
+  <br />
+  La borne supérieure est évidente, si un nombre (non signé) est codé
+  sur <strong>N</strong> bits le plus grand nombre représentable est
+  2<sup>N</sup>-1, donc si le nombre en entrée est supérieure à 2<sup>N-1</sup>
+  la solution (2<sup>N</sup>) n’est pas représentable.
+  <br />
+  La borne inférieure résulte d’un choix d’implémentation. Si le nombre en
+  entrée est 0, il suffit de renvoyer 1. Cependant, j’ai décidé de renvoyer 0
+  (car cela simplifie un peu mon code), donc ma fonction n’est pas définie pour
+  0.
+</p>
+
+<h2>Approche naïve</h2>
+
+<p>
+  La fonction suivante est l’implémentation la plus simple pour résoudre ce
+  problème. On teste les puissances de deux de 2<sup>0</sup> jusqu’à
+  2<sup>N</sup> (où <strong>N</strong> est le nombre de bits utilisé pour coder
+  un <code>int</code>) et on renvoie la première qui est supérieure
+  à <strong>n</strong>.
+</p>
+
+    <figure class="code">
+      <figcaption>Approche naïve</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+</pre></td><td class="rouge-code"><pre><span class="kt">unsigned</span> <span class="nf">next_highest_power_of_2</span><span class="p">(</span><span class="kt">unsigned</span> <span class="n">n</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="n">res</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="n">n</span> <span class="o">||</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">UINT_MAX</span> <span class="o">&gt;&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">while</span><span class="p">(</span><span class="n">res</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">)</span>
+        <span class="n">res</span> <span class="o">&lt;&lt;=</span> <span class="mi">1</span><span class="p">;</span>
+
+    <span class="k">return</span> <span class="n">res</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+<p>
+  Le premier test permet de vérifier si le nombre en entrée est dans
+  l’intervalle ]0; 2<sup>N-1</sup>]. Si ce n’est pas le cas, la fonction renvoie
+  0.
+</p>
+
+<p>
+  Le problème avec cette fonction c’est que, dans le pire des cas, elle
+  fera <strong>N</strong> itérations (si le nombre est codé sur
+  <strong>N</strong> bits). Donc à moins de connaître la distribution des
+  entrées, il vaut mieux faire attention en utilisant cette fonction car elle
+  sera « lente » (tout est relatif) si on doit traiter beaucoup de grands
+  nombres.
+</p>
+
+<p>
+  On peut aussi l’implémenter de manière à ce qu’elle parcourt les puissances de
+  deux de 2<sup>N</sup> à 2<sup>0</sup>, mais le problème reste le même (sauf
+  que cette fois ce sont les petits nombres qui demandent plus d’itérations).
+</p>
+
+<h2>Optimisation</h2>
+
+<p>
+  Il existe une autre approche, que l’on retrouve dans le livre
+  <a href="https://web.archive.org/web/20110714090055/http://www.hackersdelight.org/">Hacker’s Delight</a>,
+  qui est bien plus efficace (mais moins évidente au premier abord).
+</p>
+
+<p>
+  La technique cette fois‑ci, c’est de mettre à 1 tous les bits à droite du bit
+  à 1 de poids le plus fort. Une fois que l’on a fait ça, il suffit d’ajouter 1
+  et on obtient la première puissance de deux supérieure à notre nombre.
+</p>
+
+    <figure class="code">
+      <figcaption>Version optimisée</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre><span class="kt">unsigned</span> <span class="nf">next_highest_power_of_2</span><span class="p">(</span><span class="kt">unsigned</span> <span class="n">n</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="n">i</span><span class="p">;</span>
+    <span class="o">--</span><span class="n">n</span><span class="p">;</span>
+    <span class="k">for</span><span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="k">sizeof</span> <span class="n">n</span> <span class="o">*</span> <span class="n">CHAR_BIT</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;&lt;=</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">|=</span> <span class="n">n</span> <span class="o">&gt;&gt;</span> <span class="n">i</span><span class="p">;</span>
+    <span class="k">return</span> <span class="o">++</span><span class="n">n</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  L’avantage de cet algorithme, c’est qu’il n’y a pas de pire cas. On fera
+  toujours log<sub>2</sub>(<em>N</em>) itérations, où <strong>N</strong> est le
+  nombre de bits sur lequel est codé le nombre, indépendamment de la valeur de
+  ce nombre.
+</p>
+
+<p>
+  Pour essayer de clarifier les choses, voilà une trace pas à pas de cet
+  algorithme pour un nombre codé sur 8 bits (on fera donc log<sub>2</sub>(8)=3
+  itérations).
+</p>
+
+    <figure class="code">
+      <figcaption>Trace étape par étape</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+</pre></td><td class="rouge-code"><pre>00101010 // 42
+// Initialisation
+00101001 // --n
+// Iteration 1
+00010100 // n &gt;&gt; 1
+00111101 // n | (n &gt;&gt; 1)
+// Iteration 2
+00001111 // n &gt;&gt; 2
+00111111 // n | (n &gt;&gt; 2)
+// Iteration 3
+00000011 // n &gt;&gt; 4
+00111111 // n | (n &gt;&gt; 4)
+// Finalisation
+01000000 // ++n
+// Fin de l’algo, n = 64.
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+    On pourrait aussi écrire le code d’une autre manière, en déroulant la boucle
+    (<em>loop unrolling</em>) pour l’optimiser encore un peu plus. Le code
+    ci-dessous est un exemple pour le cas où le type <code>int</code> est codé
+    sur 32 bits.
+</p>
+
+    <figure class="code">
+      <figcaption>Version avec loop unrolling</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+</pre></td><td class="rouge-code"><pre><span class="kt">unsigned</span> <span class="nf">next_highest_power_of_2</span><span class="p">(</span><span class="kt">unsigned</span> <span class="n">n</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="o">--</span><span class="n">n</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">|=</span> <span class="n">n</span> <span class="o">&gt;&gt;</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">|=</span> <span class="n">n</span> <span class="o">&gt;&gt;</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">|=</span> <span class="n">n</span> <span class="o">&gt;&gt;</span> <span class="mi">4</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">|=</span> <span class="n">n</span> <span class="o">&gt;&gt;</span> <span class="mi">8</span><span class="p">;</span>
+    <span class="n">n</span> <span class="o">|=</span> <span class="n">n</span> <span class="o">&gt;&gt;</span> <span class="mi">16</span><span class="p">;</span>
+    <span class="k">return</span> <span class="o">++</span><span class="n">n</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  L’avantage de cette forme c’est qu’elle ne contient aucune instruction de
+  branchement, le processeur n’a donc pas besoin d’utiliser le prédicteur de
+  branchements. Du coup, aucun risque de vider le pipeline ou d’y insérer des
+  « bulles » (instructions <code>NOP</code>) en cas de mauvaises prédictions
+  lors du calcul (même si ce risque est, de toute manière, faible étant donné
+  l’efficacité des prédicteurs).
+</p>
+
+<p>
+  Pourtant, cette version est moins bonne que la précédente. Et ce pour deux
+  raisons :
+</p>
+
+<ol>
+  <li>
+    <p>
+      N’importe quel compilateur un tant soit peu évolué va dérouler la boucle
+      de lui-même si c’est nécessaire (le nombre d’itérations de notre boucle
+      étant connu à la compilation, c’est trivial).
+    </p>
+  </li>
+  <li>
+    <p>
+      Cette version est moins portable (le code fera trop d’itérations si
+      les <code>int</code> sont codés sur 16 bits, et pire encore, il ne
+      fonctionnera pas correctement si les <code>int</code> sont codés sur 64
+      bits) et on ne peut pas la rendre générique facilement.
+    </p>
+  </li>
+</ol>
+
+<p>
+  Tiens, puisque l’on parle de généricité, voyons comment mettre cela en œuvre.
+</p>
+
+<h2>Généricité</h2>
+
+<p>
+  Le problème avec la généricité, c’est que l’on a un type de retour variable,
+  donc pas moyen de faire une fonction. Le type influence également le nombre
+  d’itérations à effectuer. On va donc utiliser une macro qui prendra en
+  paramètre la variable et son type.
+</p>
+
+<p>
+  Je ne prends pas la peine de parenthèser les paramètres de la macro comme il
+  souvent recommandé, à raison d’ailleurs, de le faire car dans le cas présent
+  c’est inutile. En effet, si l’on passe autre chose qu’une variable, « 2 + 2 »
+  par exemple, ça ne passera de toute façon pas à la compilation.
+</p>
+
+    <figure class="code">
+      <figcaption>Version générique avec le type en paramètre</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="cp">#define generic_next_highest_power_of_2(n, T)\
+    do\
+    {\
+        unsigned s___;\
+        --n;\
+        for(s___ = 1; s___ &lt; sizeof(T) * CHAR_BIT; s___ &lt;&lt;= 1)\
+            n |= n &gt;&gt; s___;\
+        ++n;\
+    } while(0)
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Une rapide analyse nous montre que le second paramètre est inutile étant donné
+  que l’opérateur <code>sizeof</code> peut aussi bien travailler avec les types
+  qu’avec les variables. On peut donc réécrire la macro de cette manière :
+</p>
+
+    <figure class="code">
+      <figcaption>Version générique</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="cp">#define generic_next_highest_power_of_2(n)\
+    do\
+    {\
+        unsigned s___;\
+        --n;\
+        for(s___ = 1; s___ &lt; sizeof(n) * CHAR_BIT; s___ &lt;&lt;= 1)\
+            n |= n &gt;&gt; s___;\
+        ++n;\
+    } while(0)
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Lors de l’utilisation de cette macro avec un <code>unsigned short</code> ou
+  un <code>unsigned char</code> on obtient un warning du genre :
+</p>
+
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>warning: conversion to 'short unsigned int' from 'int' may alter its value [-Wconversion]
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  Mais c’est absolument sans risque dans le cas présent (enfin si, ça peut
+  tronquer la valeur dans certains cas, mais dans ces cas-là c’est le
+  comportement attendu donc pas de problème).
+</p>
+
+<p>
+  Cela dit, bien que cette macro soit générique, elle a quand même plusieurs
+  inconvénients par rapport à la version sous forme de fonction :
+</p>
+
+<ol>
+  <li>
+    on ne peut pas l’appliquer sur des constantes (vu qu’elle modifie
+    directement son paramètre).
+  </li>
+  <li>
+    on ne peut pas l’utiliser dans une expression (vu qu’elle ne renvoie pas de
+    valeur).
+  </li>
+  <li>
+    il y a un risque de masquage de variable. En effet, je déclare une variable
+    dans mon bloc <code>do/while</code> (la variable <code>s___</code>), et
+    comme l’utilisateur de la macro ne connait pas le nom de cette variable, il
+    n’est pas impossible qu’il utilise déjà une variable avec le même nom. Cela
+    dit, j’ai choisi un nom assez peu courant pour limiter ce risque, mais il
+    faut savoir qu’il existe.
+  </li>
+</ol>
+
+<p>
+  Le point 3 est solvable en demandant à l’utilisateur de nous fournir une
+  variable au lieu de la créer nous-même.
+</p>
+
+    <figure class="code">
+      <figcaption>Version générique avec variable explicite</figcaption>
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="cp">#define generic_next_highest_power_of_2(n, i)\
+    do\
+    {\
+        unsigned i;\
+        --n;\
+        for(i = 1; i &lt; sizeof(n) * CHAR_BIT; i &lt;&lt;= 1)\
+            n |= n &gt;&gt; i;\
+        ++n;\
+    } while(0)
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>Cela dit, les points 1 et 2 restent vrai.</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2011-05-08T00:00:00Z"
+            itemprop="datePublished">
+        2011-05-08
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#c" rel="tag">C</a> <a href="/blog/tags/#bit-twiddling" rel="tag">Bit Twiddling</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

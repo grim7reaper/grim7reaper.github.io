@@ -1,0 +1,3093 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://grim7reaper.rolinh.ch/">
+  <id>https://grim7reaper.rolinh.ch/</id>
+  <title>grim7reaper</title>
+  <updated>2019-12-06T00:00:00Z</updated>
+  <link rel="alternate" href="https://grim7reaper.rolinh.ch/" type="text/html"/>
+  <link rel="self" href="https://grim7reaper.rolinh.ch/atom.xml" type="application/atom+xml"/>
+  <author>
+    <name>Sylvain Laperche</name>
+    <uri>/about</uri>
+  </author>
+  <entry>
+    <id>tag:grim7reaper.rolinh.ch,2019-12-06:/blog/2019/12/06/python-optimisation-et-couverture-de-code/</id>
+    <title type="html">Python : optimisation et couverture de code</title>
+    <published>2019-12-06T00:00:00Z</published>
+    <updated>2019-12-06T00:00:00Z</updated>
+    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2019/12/06/python-optimisation-et-couverture-de-code/" type="text/html"/>
+    <content type="html">&lt;p&gt;
+  Il est courant de vérifier si nos tests couvrent bien notre code, et en Python
+  on utilise généralement
+  &lt;a href="https://coverage.readthedocs.io/en/latest/"&gt;coverage&lt;/a&gt; pour ça.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Cependant, il faut savoir que les optimisations de l’interpréteur peuvent
+  interférer, même si elles n’ont pas été activées explicitement via
+  l’option &lt;code&gt;-O&lt;/code&gt;.
+&lt;/p&gt;
+
+
+
+&lt;h2&gt;Démonstration&lt;/h2&gt;
+
+&lt;p&gt;
+  Le code suivant est une version simplifiée d’un code plus complexe où j’ai
+  rencontré ce problème&lt;sup id="fnref:1"&gt;&lt;a href="#fn:1"&gt;1&lt;/a&gt;&lt;/sup&gt; :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Exemple minimal reproduisant le problème&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="c1"&gt;#!/usr/bin/env python
+# coding: utf-8
+&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lst&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;lst&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+                &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="nb"&gt;Exception&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'error'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;except&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'x is odd'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;continue&lt;/span&gt;
+        &lt;span class="k"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'nothing to do'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Si l’on exécute ce code, avec &lt;code&gt;coverage run foo.py&lt;/code&gt; on obtient la
+  trace suivante :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;1
+x is odd
+nothing to do
+2
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;On constate que chaque ligne est exécutée au moins une fois :&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;code&gt;1&lt;/code&gt; : &lt;code&gt;print&lt;/code&gt; de la ligne 6.
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;x is odd&lt;/code&gt; : &lt;code&gt;print&lt;/code&gt; de la ligne 11, ce qui signifie
+    que l’on est passé par le &lt;code&gt;if&lt;/code&gt; de ligne 8 et que l’on a levé une
+    exception à la ligne 9.
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;nothing to do&lt;/code&gt; : &lt;code&gt;print&lt;/code&gt; de la ligne 14.
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;2&lt;/code&gt; : &lt;code&gt;print&lt;/code&gt; de la ligne 6, étant donné qu’il n’y a
+    pas de « nothing to do » on en conclut que l’on est passé par le
+    &lt;code&gt;continue&lt;/code&gt; de la ligne 13 (et que l’on a sauté
+    le &lt;code&gt;print&lt;/code&gt; de la ligne 14).
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  Cependant, si l’on exécute &lt;code&gt;coverage report -m&lt;/code&gt; on obtient le
+  résultat suivant :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;Name     Stmts   Miss  Cover   Missing
+--------------------------------------
+foo.py      11      1    91%   13
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  D’après &lt;code&gt;coverage&lt;/code&gt;, nous ne sommes pas passé par la ligne 13 !
+  Impossible, car si c’était le cas, nous aurions vu « nothing to do » après le
+  « 2 ».
+&lt;/p&gt;
+
+&lt;p&gt;
+  Pour aller encore plus loin dans le « fun », on peut modifier le code en
+  déplaçant le &lt;code&gt;continue&lt;/code&gt; à l’intérieur du &lt;code&gt;try&lt;/code&gt;, après la
+  levée d’exception :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Version alternative&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="c1"&gt;#!/usr/bin/env python
+# coding: utf-8
+&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lst&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;lst&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+                &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="nb"&gt;Exception&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'meh!'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+            &lt;span class="k"&gt;continue&lt;/span&gt;
+        &lt;span class="k"&gt;except&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'x is odd'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'nothing to do'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="n"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Nous avons le même comportement, car &lt;code&gt;coverage run foo.py&lt;/code&gt; produit
+  exactement la même trace :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;1
+x is odd
+nothing to do
+2
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Par contre, cette fois ci &lt;code&gt;coverage&lt;/code&gt; confirme bien que chaque ligne
+  a été exécutée :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;Name     Stmts   Miss  Cover   Missing
+--------------------------------------
+ok2.py      11      0   100%
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;Étrange n’est-ce pas ?&lt;/p&gt;
+
+
+
+&lt;h2&gt;Sous le capot&lt;/h2&gt;
+
+&lt;p&gt;
+  Dans ce genre de cas, il peut être intéressant de voir le &lt;em&gt;bytecode&lt;/em&gt;
+  généré par l’interpréteur. Pour ce faire, nous allons utiliser le
+  module &lt;code&gt;dis&lt;/code&gt; (que j’avais déjà
+  utilisé &lt;a href="/blog/2013/11/10/crackme-python/"&gt;ici&lt;/a&gt;) afin de comparer
+  le &lt;em&gt;bytecode&lt;/em&gt; des deux fonctions et essayer de comprendre l’origine de
+  cette différence.
+&lt;/p&gt;
+
+&lt;h3&gt;Version qui fonctionne&lt;/h3&gt;
+
+&lt;p&gt;On va commencer par analyser la version qui fonctionne.&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;  5           0 SETUP_LOOP              72 (to 74)
+              2 LOAD_FAST                0 (lst)
+              4 GET_ITER
+        &amp;gt;&amp;gt;    6 FOR_ITER                64 (to 72)
+              8 STORE_FAST               1 (x)
+
+  6          10 LOAD_GLOBAL              0 (print)
+             12 LOAD_FAST                1 (x)
+             14 CALL_FUNCTION            1
+             16 POP_TOP
+
+  7          18 SETUP_EXCEPT            22 (to 42)
+
+  8          20 LOAD_FAST                1 (x)
+             22 LOAD_CONST               1 (1)
+             24 BINARY_AND
+             26 POP_JUMP_IF_FALSE       36
+
+  9          28 LOAD_GLOBAL              1 (Exception)
+             30 LOAD_CONST               2 ('meh!')
+             32 CALL_FUNCTION            1
+             34 RAISE_VARARGS            1
+
+ 10     &amp;gt;&amp;gt;   36 CONTINUE_LOOP            6
+             38 POP_BLOCK
+             40 JUMP_FORWARD            20 (to 62)
+
+ 11     &amp;gt;&amp;gt;   42 POP_TOP
+             44 POP_TOP
+             46 POP_TOP
+
+ 12          48 LOAD_GLOBAL              0 (print)
+             50 LOAD_CONST               3 ('x is odd')
+             52 CALL_FUNCTION            1
+             54 POP_TOP
+             56 POP_EXCEPT
+             58 JUMP_FORWARD             2 (to 62)
+             60 END_FINALLY
+
+ 13     &amp;gt;&amp;gt;   62 LOAD_GLOBAL              0 (print)
+             64 LOAD_CONST               4 ('nothing to do')
+             66 CALL_FUNCTION            1
+             68 POP_TOP
+             70 JUMP_ABSOLUTE            6
+        &amp;gt;&amp;gt;   72 POP_BLOCK
+        &amp;gt;&amp;gt;   74 LOAD_CONST               0 (None)
+             76 RETURN_VALUE
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Petite parenthèse sur le format de sortie de &lt;code&gt;dis&lt;/code&gt; :
+&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    première colonne : numéro de ligne pour la première instruction de chaque
+    ligne (une ligne de code Python étant composée de plusieurs instructions).
+  &lt;/li&gt;
+  &lt;li&gt;
+    deuxième colonne : &lt;code&gt;--&gt;&lt;/code&gt; pour indiquer l’instruction en cours
+    d’exécution.
+  &lt;/li&gt;
+  &lt;li&gt;
+    troisième colonne : &lt;code&gt;&gt;&gt;&lt;/code&gt; pour indiquer que l’instruction est une
+    cible de saut (&lt;em&gt;i.e.&lt;/em&gt; une autre instruction peut sauter à cet
+    endroit).
+  &lt;/li&gt;
+  &lt;li&gt;
+    quatrième colonne : &lt;em&gt;offset&lt;/em&gt; de l’instruction (souvent utilisé comme
+    cible de saut).
+  &lt;/li&gt;
+  &lt;li&gt;
+    cinquième colonne : nom de l’instruction.
+  &lt;/li&gt;
+  &lt;li&gt;
+    sixième colonne : arguments de l’instruction.
+  &lt;/li&gt;
+  &lt;li&gt;
+    septième colonne : informations supplémentaires sur les arguments.
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;
+  Sachant cela, on voit bien que notre &lt;code&gt;continue&lt;/code&gt; ligne 10 est
+  traduit en un &lt;code&gt;CONTINUE_LOOP&lt;/code&gt; (et deux autres instructions pour
+  sortir du &lt;code&gt;try&lt;/code&gt; et retourner au début de la boucle).
+&lt;/p&gt;
+
+&lt;h3&gt;Version problèmatique&lt;/h3&gt;
+
+&lt;p&gt;
+  Maintenant, voyons voir le &lt;em&gt;bytecode&lt;/em&gt; de la version
+  problèmatique :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;  5           0 SETUP_LOOP              72 (to 74)
+              2 LOAD_FAST                0 (lst)
+              4 GET_ITER
+        &amp;gt;&amp;gt;    6 FOR_ITER                64 (to 72)
+              8 STORE_FAST               1 (x)
+
+  6          10 LOAD_GLOBAL              0 (print)
+             12 LOAD_FAST                1 (x)
+             14 CALL_FUNCTION            1
+             16 POP_TOP
+
+  7          18 SETUP_EXCEPT            20 (to 40)
+
+  8          20 LOAD_FAST                1 (x)
+             22 LOAD_CONST               1 (1)
+             24 BINARY_AND
+             26 POP_JUMP_IF_FALSE       36
+
+  9          28 LOAD_GLOBAL              1 (Exception)
+             30 LOAD_CONST               2 ('meh!')
+             32 CALL_FUNCTION            1
+             34 RAISE_VARARGS            1
+        &amp;gt;&amp;gt;   36 POP_BLOCK
+             38 JUMP_ABSOLUTE            6
+
+ 10     &amp;gt;&amp;gt;   40 POP_TOP
+             42 POP_TOP
+             44 POP_TOP
+
+ 11          46 LOAD_GLOBAL              0 (print)
+             48 LOAD_CONST               3 ('x is odd')
+             50 CALL_FUNCTION            1
+             52 POP_TOP
+             54 POP_EXCEPT
+             56 JUMP_FORWARD             4 (to 62)
+             58 END_FINALLY
+
+ 13          60 JUMP_ABSOLUTE            6
+
+ 14     &amp;gt;&amp;gt;   62 LOAD_GLOBAL              0 (print)
+             64 LOAD_CONST               4 ('nothing to do')
+             66 CALL_FUNCTION            1
+             68 POP_TOP
+             70 JUMP_ABSOLUTE            6
+        &amp;gt;&amp;gt;   72 POP_BLOCK
+        &amp;gt;&amp;gt;   74 LOAD_CONST               0 (None)
+             76 RETURN_VALUE
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  La première chose que l’on remarque, c’est l’absence
+  d’instruction &lt;code&gt;CONTINUE_LOOP&lt;/code&gt; : à la place nous avons
+  un &lt;code&gt;JUMP_ABSOLUTE&lt;/code&gt; à la ligne 13.
+&lt;/p&gt;
+
+&lt;p&gt;
+  La seconde chose que l’on remarque c’est que cette instruction
+  &lt;code&gt;JUMP_ABSOLUTE&lt;/code&gt; n’est pas atteignable :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    si la condition du &lt;code&gt;if&lt;/code&gt; est fausse (position 26), on saute à la
+    position 36 qui fait un saut à la position 6.
+  &lt;/li&gt;
+  &lt;li&gt;
+    si la condition du &lt;code&gt;if&lt;/code&gt; est vraie, on va lancer une exception et
+    sauter à la position 40 (cf. le &lt;code&gt;SETUP_EXCEPT&lt;/code&gt; de la position
+    18), puis exécuter les instructions jusqu’au saut de la position 56 qui nous
+    amène à la position 62.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  Dans les deux cas, on ne passe pas par la position 60, et comme aucune
+  instruction ne saute à cette position (elle n’est pas marqué
+  avec &lt;code&gt;&gt;&gt;&lt;/code&gt;) et bien cette instruction n’est jamais exécutée.
+&lt;/p&gt;
+
+
+
+&lt;h3&gt;Hypothèse&lt;/h3&gt;
+
+&lt;p&gt;
+  Si l’on devait générer le code nous-même en faisant du « mot à mot », on
+  produirait probablement la séquence suivante :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    on commence par traduire le &lt;code&gt;if&lt;/code&gt; de la ligne 8 en utilisant
+    un &lt;code&gt;POP_JUMP_IF_FALSE&lt;/code&gt; qui saute à la fin du bloc
+    &lt;code&gt;try&lt;/code&gt; sur un &lt;code&gt;POP_BLOCK&lt;/code&gt; (position 36) pour sortir du
+    bloc.
+  &lt;/li&gt;
+  &lt;li&gt;
+    à la suite de ce &lt;code&gt;POP_BLOCK&lt;/code&gt; on ajoute un saut jusqu’au
+    &lt;code&gt;continue&lt;/code&gt; de la ligne 13/position 60 (probablement en utilisant
+    un &lt;code&gt;JUMP_FORWARD&lt;/code&gt;).
+  &lt;/li&gt;
+  &lt;li&gt;
+    enfin, le &lt;code&gt;continue&lt;/code&gt; de la ligne 13 est représenté par
+    un &lt;code&gt;CONTINUE_LOOP&lt;/code&gt; qui saute au début de la boucle à la position
+    6 (comme dans l’exemple qui fonctionne).
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  Maintenant, si on prend un peu de recul et que l’on décrit les choses de
+  manière plus abstraite cela donne :
+&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    saute vers A si la condition est fausse (&lt;code&gt;POP_JUMP_IF_FALSE&lt;/code&gt; vers
+    le &lt;code&gt;POP_BLOCK&lt;/code&gt;).
+  &lt;/li&gt;
+  &lt;li&gt;
+    saute vers B (&lt;code&gt;JUMP_FORWARD&lt;/code&gt; vers le &lt;code&gt;continue&lt;/code&gt;).
+  &lt;/li&gt;
+  &lt;li&gt;
+    saute vers C (&lt;code&gt;CONTINUE_LOOP&lt;/code&gt; vers le début de la boucle).
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;
+  On remarque que les deux dernières étapes sont des sauts inconditionnels, par
+  conséquent l’étape 2 est superflue : on peut sauter de A vers C directement.
+&lt;/p&gt;
+
+&lt;p&gt;
+  On peut donc raisonnablement penser que CPython sait reconnaître ce motif de
+  « deux sauts inconditionnels consécutifs » et le remplace par un unique saut
+  vers la destination finale.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Ce genre d’optimisations où l’on remplace une suite
+  d’instructions &lt;code&gt;A&lt;/code&gt; par une autre suite
+  d’instructions &lt;code&gt;B&lt;/code&gt; fonctionnellement équivalente (mais plus
+  efficace) est très commune et s’appelle une
+  &lt;a href="https://en.wikipedia.org/wiki/Peephole_optimization"&gt;peephole optimization&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Et c’est bien ce que semble faire CPython en sautant directement au début de
+  la boucle depuis la fin du bloc &lt;code&gt;try&lt;/code&gt;, ignorant totalement notre
+  bloc &lt;code&gt;else&lt;/code&gt; au passage (qui ne contient rien d’autre qu’un saut
+  inconditionnel).
+&lt;/p&gt;
+
+&lt;p&gt;
+  Cela semble être confirmé par le fait que si l’on rajoute
+  un &lt;code&gt;print&lt;/code&gt; dans le &lt;code&gt;else&lt;/code&gt; (avant
+  le &lt;code&gt;continue&lt;/code&gt;) alors le bloc &lt;code&gt;else&lt;/code&gt; et
+  son &lt;code&gt;continue&lt;/code&gt; sont maintenant exécutés. En effet, dans le cas
+  contraire le &lt;code&gt;print&lt;/code&gt; ne serait pas exécuté et cela provoquerait une
+  différence de comportement observable qui rendrait l’optimisation caduque.
+&lt;/p&gt;
+
+
+
+&lt;h3&gt;Confirmation de l’hypothèse&lt;/h3&gt;
+
+&lt;p&gt;
+  Bon, on a maintenant une hypothèse plutôt solide, et après quelques recherches
+  on tombe sur :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;a href="https://github.com/pytest-dev/pytest-cov/issues/167"&gt;ce rapport de bogue&lt;/a&gt;
+    chez &lt;code&gt;pytest-cov&lt;/code&gt; qui nous apprend que la
+    bibliothèque &lt;code&gt;coverage&lt;/code&gt; serait à l’origine du problème.
+  &lt;/li&gt;
+  &lt;li&gt;
+    il s’avère que le lien donné pointe sur
+    &lt;a href="https://github.com/nedbat/coveragepy/issues/594"&gt;un doublon&lt;/a&gt;.
+  &lt;/li&gt;
+  &lt;li&gt;
+    en remontant au
+    &lt;a href="https://github.com/nedbat/coveragepy/issues/198"&gt;bogue d’origine&lt;/a&gt;
+    (on remarquera le titre qui mentionne &lt;code&gt;continue&lt;/code&gt;) on découvre que
+    le problème ne vient pas de &lt;code&gt;coverage&lt;/code&gt; lui-même mais de
+    l’interpréteur Python (CPython en l’occurrence) qui est capable de remplacer
+    un saut vers un &lt;code&gt;continue&lt;/code&gt; par un saut vers le début de la boucle
+    directement (au passage, on y apprend aussi que cette optimisation est
+    &lt;strong&gt;toujours&lt;/strong&gt; activée).
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  Pour ceux qui veulent suivre l’évolution de ce problème,
+  &lt;a href="https://bugs.python.org/issue2506"&gt;un bogue à été ouvert&lt;/a&gt; pour
+  l’interpréteur.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Cela vient donc confirmer notre hypothèse : l’optimiseur intervient sur les
+  instructions générées, ce qui affecte la couverture du code source.
+&lt;/p&gt;
+
+
+
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;
+  La première leçon que l’on peut en tirer c’est que le code que l’on voit ne
+  correspond pas forcément au code qui est exécuté. C’est bien connu dans les
+  langages tel que le C par exemple, mais c’est plus surprenant en Python.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Deuxième point important : ce problème est simple à résoudre car « il
+  suffit de » réécrire le code en utilisant la version « qui fonctionne », et
+  c’est même plutôt bénéfique étant donné qu’elle est aussi plus lisible que le
+  code d’origine. En effet, l’utilisation du &lt;code&gt;else&lt;/code&gt; dans une
+  construction &lt;code&gt;try/except&lt;/code&gt; est spécifique à Python et donc
+  probablement méconnue.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Au passage, ces constructions « bizarres » à base
+  de &lt;code&gt;try&lt;/code&gt;, &lt;code&gt;else&lt;/code&gt; et &lt;code&gt;continue&lt;/code&gt;, en plus
+  d’être parfois difficile à déchiffrer, ne sont pas toujours bien supportées :
+  pendant longtemps il a été impossible d’avoir un
+  &lt;code&gt;continue&lt;/code&gt; à l’intérieur d’un bloc &lt;code&gt;try&lt;/code&gt; (c’est
+  maintenant possible). Et aujourd’hui
+  encore&lt;sup id="fnref:2"&gt;&lt;a href="#fn:2"&gt;2&lt;/a&gt;&lt;/sup&gt; il n’est pas possible
+  d’avoir un &lt;code&gt;continue&lt;/code&gt; dans un bloc &lt;code&gt;finally&lt;/code&gt; : c’est une
+  erreur de syntaxe !
+&lt;/p&gt;
+
+&lt;p&gt;
+  En conclusion, il vaut mieux écrire du code simple et quand quelque chose de
+  bizarre se produit il ne faut pas hésiter à regarder sous le capot pour en
+  comprendre les raisons.
+&lt;/p&gt;
+
+
+
+&lt;div class="footnotes"&gt;
+  &lt;hr class="weak-hr" /&gt;
+  &lt;ol&gt;
+    &lt;li id="fn:1"&gt;
+      &lt;p&gt;
+        le code du &lt;code&gt;else&lt;/code&gt; dans la construction
+        &lt;code&gt;try&lt;/code&gt;/&lt;code&gt;except&lt;/code&gt;/&lt;code&gt;else&lt;/code&gt; est exécuté
+        seulement si aucune exception n’a été levée à l‘intérieur du
+        &lt;code&gt;try&lt;/code&gt;.&lt;a href="#fnref:1"&gt;↩&lt;/a&gt;
+      &lt;/p&gt;
+    &lt;/li&gt;
+    &lt;li id="fn:2"&gt;
+      &lt;p&gt;
+        c’est maintenant possible en
+        &lt;a href="https://docs.python.org/3.8/whatsnew/3.8.html#other-language-changes"&gt;Python 3.8&lt;/a&gt;,
+        qui est sorti entre le début de la rédaction de cet article et sa
+        publication.&lt;a href="#fnref:2"&gt;↩&lt;/a&gt;
+      &lt;/p&gt;
+    &lt;/li&gt;
+  &lt;/ol&gt;
+&lt;/div&gt;
+</content>
+  </entry>
+  <entry>
+    <id>tag:grim7reaper.rolinh.ch,2019-11-17:/blog/2019/11/17/migration-du-blog-sur-nanoc/</id>
+    <title type="html">Migration du blog sur Nanoc</title>
+    <published>2019-11-17T00:00:00Z</published>
+    <updated>2019-11-17T00:00:00Z</updated>
+    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2019/11/17/migration-du-blog-sur-nanoc/" type="text/html"/>
+    <content type="html">&lt;p&gt;
+  Comme vous l’avez très certainement remarqué, le blog a changé d’apparence :
+  c’est dû à la migration du blog sur Nanoc.
+&lt;/p&gt;
+
+
+
+&lt;h2&gt;Pourquoi cette migration ?&lt;/h2&gt;
+
+&lt;p&gt;Plusieurs raisons m’ont donné envie de quitter Octopress :&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;
+    la façon dont fonctionne Octopress 2 est « perfectible™ » : pour utiliser
+    Octopress il faut cloner le dépôt Git, puis créer son blog dans ce dépôt (ce
+    qui peut générer des conflits lorsque l’on souhaite mettre à jour Octopress
+    avec un &lt;code&gt;git pull&lt;/code&gt;). C’est d’ailleurs l’un des défauts qui a
+    amené l’auteur à créer
+    &lt;a href="https://octopress.org/2015/01/15/octopress-3.0-is-coming/"&gt;Octopress 3&lt;/a&gt;.
+  &lt;/li&gt;
+  &lt;li&gt;
+    Octopress lui-même semble plus ou moins mort : Octopress 2 n’est plus
+    développé et le développement d’Octopress 3 semble à l’arrêt. Je n’ai pas
+    vraiment envie de construire mon blog sur un &lt;em&gt;framework&lt;/em&gt;
+    potentiellement non-maintenu.
+  &lt;/li&gt;
+  &lt;li&gt;
+    Octopress est livré avec beaucoup de fonctionnalités par défaut, c’est
+    très pratique pour débuter et ça m’a bien aidé au début. Mais maintenant
+    que je veux avoir un contrôle plus fin et plus de compréhension sur la
+    tambouille interne ce côté « magique » deviens un désavantage.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  Quand j’ai décidé de migrer, en août 2017 (oui, il y a eu un &lt;em&gt;looooong&lt;/em&gt;
+  délai entre l’envie et la réalisation concrète), j’ai demandé à
+  &lt;a href="https://kaworu.ch/about/"&gt;kAworu&lt;/a&gt; ce qu’il utilisait et la réponse
+  fut &lt;a href="https://nanoc.app/"&gt;Nanoc&lt;/a&gt;. Après avoir fait quelques
+  recherches dessus, j’ai décidé d’utiliser Nanoc moi aussi.
+  &lt;br /&gt;
+  Voici quelques points qui ont fait pencher la balance en sa faveur :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;c’est du Ruby, et le Ruby c’est fun, puissant et simple à utiliser.&lt;/li&gt;
+  &lt;li&gt;pas de magie par défaut, il faut vraiment faire les choses soit-même.&lt;/li&gt;
+  &lt;li&gt;&lt;a href="https://nanoc.app/about/"&gt;la documentation&lt;/a&gt; est bonne.&lt;/li&gt;
+  &lt;li&gt;et surtout c’est testé et approuvé par kAworu ! :p&lt;/li&gt;
+&lt;/ul&gt;
+
+
+
+&lt;h2&gt;Changements visibles&lt;/h2&gt;
+
+&lt;p&gt;
+  Le changement le plus visible est bien évidemment le thème du blog : j’utilise
+  maintenant une CSS faite maison. Cependant, étant donné mes connaissances
+  limitées dans ce domaine, je suis parti sur un thème très simple. Malgré cela,
+  j’ai essayé de rendre le résultat &lt;em&gt;responsive&lt;/em&gt; (du moins en partie…).
+  &lt;br /&gt;
+  Notez également que, pour épargner vos yeux (mon mauvais goût en matière
+  d’associations de couleurs étant légendaire), je me suis limité aux couleurs
+  de &lt;a href="https://ethanschoonover.com/solarized/"&gt;Solarized&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Au niveau de la structure, là aussi j’ai beaucoup simplifié :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    la page d’accueil liste maintenant tous les articles publiés (elle remplace
+    donc la page d’archives, qui a été supprimée) : cela permet d’avoir une vue
+    d’ensemble du contenu du blog au premier coup d’œil.
+  &lt;/li&gt;
+  &lt;li&gt;
+    pas de pagination (devenu inutile avec la nouvelle page d’accueil).
+  &lt;/li&gt;
+  &lt;li&gt;
+    utilisation d’une unique page pour lister les articles classés par
+    catégories. Je reviendrais peut-être à une page par catégorie (comme c’était
+    le cas avant) quand j’aurai plus d’articles.
+  &lt;/li&gt;
+  &lt;li&gt;
+    chaque article possède maintenant une courte description qui est affiché sur
+    la page d’accueil et la page des catégories.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;En ce qui concerne les changements moins visibles :&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    remplacement des liens &lt;code&gt;http&lt;/code&gt; par &lt;code&gt;https&lt;/code&gt; quand c’est
+    possible (de nos jours, la plupart des sites sont accessible en HTTPS, ce
+    qui n’était pas forcément le cas lors de la rédaction de certains articles).
+  &lt;/li&gt;
+  &lt;li&gt;
+    réparation des liens cassés, en utilisant
+    &lt;a href="https://web.archive.org/"&gt;archive.org&lt;/a&gt; si nécessaire.
+  &lt;/li&gt;
+  &lt;li&gt;
+    nouvelle favicon (faite maison, avec mes maigres capacités artistiques).
+  &lt;/li&gt;
+  &lt;li&gt;
+    suppression de tout le JavaScript (il n’y en avait pas beaucoup à la base,
+    mais maintenant il n’y en a plus du tout : 100% &lt;em&gt;JS free&lt;/em&gt;).
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+
+
+&lt;h2&gt;Sous le capot&lt;/h2&gt;
+
+&lt;h3&gt;Le langage source&lt;/h3&gt;
+
+&lt;p&gt;
+  Le premier changement interne est le passage de Markdown à
+  &lt;a href="https://en.wikipedia.org/wiki/ERuby"&gt;eRuby&lt;/a&gt; pour la rédaction des
+  articles.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Le principal problème de Markdown est que le format est limité et il faut
+  souvent utiliser des dialectes (comme le &lt;em&gt;GitHub Flavored Markdown&lt;/em&gt;)
+  pour avoir plus de fonctionnalités. Par exemple, Octopress utilise
+  &lt;a href="https://kramdown.gettalong.org/"&gt;kramdown&lt;/a&gt; (qui est déjà un
+  Markdown enrichi) couplé avec
+  &lt;a href="https://shopify.github.io/liquid/"&gt;Liquid&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;p&gt;
+  En utilisant eRuby, j’ai toutes les fonctionnalités nécessaires avec un seul
+  langage, sans avoir à recourir à des extensions ou dialectes. Et en bonus
+  j’ai un contrôle beaucoup plus fin sur le HTML généré (au contraire de
+  Markdown), ce qui est très pratique.
+&lt;/p&gt;
+
+&lt;h3&gt;La coloration syntaxique&lt;/h3&gt;
+
+&lt;p&gt;
+  Pour la coloration syntaxique des blocs de code, il n’y a rien de prévu par
+  défaut dans Nanoc (au contraire d’Octopress). Je suis donc allé faire un tour
+  sur le blog de kAworu pour voir ce qu’il utilisait :
+  &lt;a href="http://rouge.jneen.net/"&gt;Rouge&lt;/a&gt; via
+  &lt;a href="https://github.com/kAworu/kaworu.ch/blob/4f64985deb187ef7abb0494c602a3c69806f1b8a/lib/filters/octohilight.rb"&gt;un filtre Nanoc fait maison&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Je me suis donc très fortement inspiré de son approche, avec toutefois
+  quelques petites simplifications (étant donné que je n’avais pas besoin de
+  certaines fonctionnalités).
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;highlight.rb&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'json'&lt;/span&gt;
+
+&lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'rouge'&lt;/span&gt;
+
+&lt;span class="no"&gt;Nanoc&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Filter&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;define&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:highlight&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;content&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;_params&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+  &lt;span class="n"&gt;content&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;gsub&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sr"&gt;/```(?&amp;lt;options&amp;gt;\{[^}]*\})?\n(?&amp;lt;code&amp;gt;.+?)```$/m&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
+    &lt;span class="c1"&gt;# Get options.&lt;/span&gt;
+    &lt;span class="n"&gt;options&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;JSON&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="no"&gt;Regexp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;last_match&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:options&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;||&lt;/span&gt; &lt;span class="s1"&gt;'{}'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;lang&lt;/span&gt;    &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'lang'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'text'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;title&lt;/span&gt;   &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'title'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;''&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;linenos&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'linenos'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kp"&gt;true&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="c1"&gt;# Highlight code.&lt;/span&gt;
+    &lt;span class="n"&gt;formatter&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Rouge&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Formatters&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;HTML&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;
+    &lt;span class="n"&gt;formatter&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Rouge&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Formatters&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;HTMLTable&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;formatter&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;linenos&lt;/span&gt;
+    &lt;span class="n"&gt;lexer&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Rouge&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Lexer&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;find&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lang&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;code&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;formatter&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;format&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lexer&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;lex&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="no"&gt;Regexp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;last_match&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:code&lt;/span&gt;&lt;span class="p"&gt;)))&lt;/span&gt;
+    &lt;span class="c1"&gt;# Wrap the result.&lt;/span&gt;
+    &lt;span class="n"&gt;title&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s2"&gt;"&amp;lt;figcaption&amp;gt;&lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;title&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;lt;/figcaption&amp;gt;"&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="n"&gt;title&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;empty?&lt;/span&gt;
+    &lt;span class="n"&gt;code&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s2"&gt;"&amp;lt;pre&amp;gt;&lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;&amp;lt;/pre&amp;gt;"&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="n"&gt;linenos&lt;/span&gt;
+    &lt;span class="o"&gt;&amp;lt;&amp;lt;-&lt;/span&gt;&lt;span class="no"&gt;HTML&lt;/span&gt;&lt;span class="sh"&gt;
+    &amp;lt;figure class="code"&amp;gt;
+      &lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;title&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="sh"&gt;
+      &amp;lt;div class="highlight"&amp;gt;
+        &lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="sh"&gt;
+      &amp;lt;/div&amp;gt;
+    &amp;lt;/figure&amp;gt;
+&lt;/span&gt;&lt;span class="no"&gt;    HTML&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;h3&gt;La gestion des catégories&lt;/h3&gt;
+
+&lt;p&gt;
+  Nanoc fourni déjà
+  &lt;a href="https://nanoc.app/doc/reference/helpers/#tagging"&gt;quelques fonctions&lt;/a&gt;
+  pour gérer les catégories sur les articles. Malheureusement ces fonctions ne
+  gèrent pas très bien les catégories qui contiennent des espaces (« Trucs et
+  astuces » par exemple), et cela pose problème si l’on souhaite utiliser une
+  catégorie en tant qu’ancre ou ID HTML.
+&lt;/p&gt;
+
+&lt;p&gt;J’ai donc réimplémenté moi-même certaines de ces fonctions :&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="c1"&gt;# Return the articles tagged with `tag`, sorted by descending creation date.&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;articles_with_tag&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;tag&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="n"&gt;sorted_articles&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;select&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;article&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="n"&gt;article&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:tags&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[]).&lt;/span&gt;&lt;span class="nf"&gt;include?&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;tag&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Return a formatted list of tags for the given item as a string.&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;tags_for&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;separator: &lt;/span&gt;&lt;span class="s1"&gt;', '&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="n"&gt;base_url&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;'/blog/tags/#'&lt;/span&gt;
+  &lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:tags&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;map&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;tag&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+    &lt;span class="sx"&gt;%(&amp;lt;a href="#{base_url}#{to_html_id(tag)}" rel="tag"&amp;gt;#{tag}&amp;lt;/a&amp;gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;separator&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Return a version of `str` that can be used as an HTML ID.&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;to_html_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;downcase&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;tr&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;' '&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'-'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Au passage, j’ai également dû coder une fonction qui me renvoie la liste des
+  catégories triée par ordre alphabétique. Le fait que j’utilise le français
+  implique que je ne peux pas utiliser la fonction &lt;code&gt;sort&lt;/code&gt; de Ruby car
+  elle ne gère pas correctement l’ordre des caractères non ASCII.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;['Développement', 'Divers', 'Design Patterns'].sort
+=&amp;gt; ["Design Patterns", "Divers", "Développement"]
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  On voit que &lt;code&gt;Dé&lt;/code&gt; est placé après &lt;code&gt;Di&lt;/code&gt;, ce qui est
+  incorrect : il devrait être placé avant &lt;code&gt;Di&lt;/code&gt; (mais bien
+  après &lt;code&gt;De&lt;/code&gt;). Pour pallier au problème, j’ai utilisé la gem
+  &lt;a href="https://github.com/grosser/sort_alphabetical"&gt;sort_alphabetical&lt;/a&gt; :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;['Développement', 'Divers', 'Design Patterns'].sort_alphabetical
+=&amp;gt; ["Design Patterns", "Développement", "Divers"]
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Cette fois, l’ordre est correct. Il suffit ensuite d’utiliser cette fonction
+  sur la liste des catégories :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'sort_alphabetical'&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Return a list of existing tags, sorted alphabetically.&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;tags&lt;/span&gt;
+  &lt;span class="vi"&gt;@items&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;inject&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="no"&gt;Set&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;tags&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+    &lt;span class="n"&gt;tags&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;merge&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:tags&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[]))&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;to_a&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;sort_alphabetical&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;h3&gt;Les vérifications automatisées&lt;/h3&gt;
+
+&lt;p&gt;
+  Nanoc propose
+  &lt;a href="https://nanoc.app/doc/testing/"&gt;un système de validation&lt;/a&gt; qui
+  permet d’exécuter (manuellement ou avant de déployer le site) des étapes de
+  vérifications sur le contenu du site généré. C’est extrêmement pratique pour
+  détecter des erreurs (telles que des liens cassés) lors du développement/avant
+  de déployer le site.
+&lt;/p&gt;
+
+&lt;p&gt;
+  J’ai donc mit à jour mon &lt;code&gt;nanoc.yaml&lt;/code&gt; pour activer les
+  vérifications suivantes :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code&gt;css_local&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;html_local&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;atom&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;sitemap&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;external_links&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;internal_links&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;stale&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  &lt;code&gt;external_links&lt;/code&gt;, &lt;code&gt;internal_links&lt;/code&gt; et &lt;code&gt;stale&lt;/code&gt;
+  sont fournis par Nanoc. Les deux premiers vérifient que les liens utilisés
+  sont valides et le dernier vérifie qu’il n’y a pas de fichiers inattendu dans
+  le répertoire qui est copié lors du déploiement.
+&lt;/p&gt;
+
+&lt;h4&gt;HTML et CSS&lt;/h4&gt;
+
+&lt;p&gt;
+  &lt;code&gt;css_local&lt;/code&gt; et &lt;code&gt;html_local&lt;/code&gt; vérifient que le CSS et le
+  HTML sont bien valides. Nanoc propose déjà ce genre de vérification
+  via &lt;code&gt;css&lt;/code&gt; et &lt;code&gt;html&lt;/code&gt;, mais ils ne me convenaient pas pour
+  les raisons suivantes :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    ils ne remontent que les erreurs, or les avertissements sont parfois
+    intéressants à prendre en compte (même si pas obligatoire).
+  &lt;/li&gt;
+  &lt;li&gt;
+    ils fonctionnent en faisant des requêtes sur
+    &lt;a href="https://validator.w3.org/"&gt;les validateurs du W3C&lt;/a&gt;, ce qui
+    requiert d’avoir un accès à Internet.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  C’est pourquoi j’ai implémenté &lt;code&gt;css_local&lt;/code&gt;
+  et &lt;code&gt;html_local&lt;/code&gt; qui utilisent un
+  &lt;a href="https://github.com/validator/validator"&gt;validatornu&lt;/a&gt;
+  installé localement.
+  &lt;br /&gt;
+  Un autre avantage à cela, en plus de fonctionner hors-ligne, est que je peux
+  maintenant avoir accès aux avertissements (et ignorer ceux qui me semblent non
+  pertinents).
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;css_local&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="no"&gt;Nanoc&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Check&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;define&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:css_local&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
+  &lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'json'&lt;/span&gt;
+  &lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'open3'&lt;/span&gt;
+
+  &lt;span class="vi"&gt;@output_filenames&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+    &lt;span class="k"&gt;next&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="no"&gt;File&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;extname&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="s1"&gt;'.css'&lt;/span&gt;
+
+    &lt;span class="n"&gt;command&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="sx"&gt;%W[validatornu --css --format json &lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="sx"&gt;]&lt;/span&gt;
+    &lt;span class="n"&gt;output&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Open3&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;capture2e&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;command&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;next&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;output&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;empty?&lt;/span&gt;
+
+    &lt;span class="no"&gt;JSON&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;output&lt;/span&gt;&lt;span class="p"&gt;)[&lt;/span&gt;&lt;span class="s1"&gt;'messages'&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+      &lt;span class="n"&gt;reason&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'message'&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;delete_prefix&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'CSS: '&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+      &lt;span class="n"&gt;errmsg&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s2"&gt;"l.&lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'lastLine'&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; - &lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;reason&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;
+      &lt;span class="n"&gt;add_issue&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;errmsg&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;subject: &lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;html_local&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="no"&gt;Nanoc&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Check&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;define&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:html_local&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
+  &lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'json'&lt;/span&gt;
+  &lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'open3'&lt;/span&gt;
+
+  &lt;span class="no"&gt;IGNORE_LIST&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;
+    &lt;span class="c1"&gt;# Nope, that's not the HTML5 way.&lt;/span&gt;
+    &lt;span class="s1"&gt;'Consider using the “h1” element as a top-level heading only'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="c1"&gt;# My &amp;lt;article&amp;gt; use h1, they have header…&lt;/span&gt;
+    &lt;span class="s1"&gt;'Article lacks heading. Consider using “h2”-“h6”'&lt;/span&gt;
+  &lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;freeze&lt;/span&gt;
+
+  &lt;span class="vi"&gt;@output_filenames&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+    &lt;span class="k"&gt;next&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="no"&gt;File&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;extname&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="s1"&gt;'.html'&lt;/span&gt;
+
+    &lt;span class="n"&gt;command&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="sx"&gt;%W[validatornu --html --format json &lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="sx"&gt;]&lt;/span&gt;
+    &lt;span class="n"&gt;output&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Open3&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;capture2e&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;command&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;next&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;output&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;empty?&lt;/span&gt;
+
+    &lt;span class="no"&gt;JSON&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;output&lt;/span&gt;&lt;span class="p"&gt;)[&lt;/span&gt;&lt;span class="s1"&gt;'messages'&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+      &lt;span class="n"&gt;errmsg&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'message'&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+      &lt;span class="k"&gt;next&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="no"&gt;IGNORE_LIST&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;any?&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="n"&gt;errmsg&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;include?&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+
+      &lt;span class="n"&gt;add_issue&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;"l.&lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'lastLine'&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt; - &lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;errmsg&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;subject: &lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;h4&gt;Sitemap&lt;/h4&gt;
+
+&lt;p&gt;
+  &lt;code&gt;sitemap&lt;/code&gt; vérifie, à l’aide de l’excellente bibiothèque
+  &lt;a href="https://nokogiri.org/"&gt;Nokogiri&lt;/a&gt;, que le &lt;code&gt;sitemap.xml&lt;/code&gt;
+  généré est un XML valide &lt;strong&gt;ET&lt;/strong&gt; qu’il respecte bien le schéma
+  attendu (j’ai récupéré le &lt;code&gt;sitemap.xsd&lt;/code&gt; dans
+  &lt;a href="https://github.com/kAworu/kaworu.ch/"&gt;les sources du blog de kAworu&lt;/a&gt;).
+&lt;/p&gt;
+
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;sitemap&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="no"&gt;Nanoc&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Check&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;define&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:sitemap&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
+  &lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'nokogiri'&lt;/span&gt;
+
+  &lt;span class="vi"&gt;@output_filenames&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+    &lt;span class="k"&gt;next&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="no"&gt;File&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;basename&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="s1"&gt;'sitemap.xml'&lt;/span&gt;
+
+    &lt;span class="n"&gt;xsd&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Nokogiri&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;XML&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Schema&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="no"&gt;File&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;read&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'misc/sitemap.xsd'&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+    &lt;span class="n"&gt;sitemap&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Nokogiri&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;XML&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="no"&gt;File&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;read&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+    &lt;span class="n"&gt;xsd&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;validate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sitemap&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+      &lt;span class="n"&gt;add_issue&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;message&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;subject: &lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;h4&gt;Atom&lt;/h4&gt;
+
+&lt;p&gt;
+  Pour &lt;code&gt;atom&lt;/code&gt; c’est le même principe que &lt;code&gt;sitemap&lt;/code&gt; : on
+  utilise Nokogiri pour valider le XML de &lt;code&gt;atom.xml&lt;/code&gt;, ainsi que la
+  validité du schéma.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;atom&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="no"&gt;Nanoc&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Check&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;define&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:atom&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
+  &lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'nokogiri'&lt;/span&gt;
+
+  &lt;span class="vi"&gt;@output_filenames&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+    &lt;span class="k"&gt;next&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="no"&gt;File&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;basename&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="s1"&gt;'atom.xml'&lt;/span&gt;
+
+    &lt;span class="n"&gt;rng&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Nokogiri&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;XML&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;RelaxNG&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="no"&gt;File&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;read&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'misc/atom.rng'&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+    &lt;span class="n"&gt;sitemap&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Nokogiri&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;XML&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="no"&gt;File&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;read&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+    &lt;span class="n"&gt;rng&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;validate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;sitemap&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+      &lt;span class="n"&gt;add_issue&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;message&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;subject: &lt;/span&gt;&lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  On remarquera que cette fois le schéma n’est pas défini par un
+  fichier &lt;code&gt;.xsd&lt;/code&gt;. En effet, il n’y a pas de &lt;em&gt;XSD&lt;/em&gt;
+  (&lt;em&gt;XML Schema Definition&lt;/em&gt;) officielle pour le format Atom. La
+  &lt;a href="https://validator.w3.org/feed/docs/rfc4287.html#rfc.section.B"&gt;RFC 4287&lt;/a&gt;
+  fourni une spécification &lt;em&gt;Relax NG&lt;/em&gt; (&lt;em&gt;&lt;strong&gt;Re&lt;/strong&gt;gular
+  &lt;strong&gt;La&lt;/strong&gt;nguage for &lt;strong&gt;X&lt;/strong&gt;ML &lt;strong&gt;N&lt;/strong&gt;ext
+  &lt;strong&gt;G&lt;/strong&gt;eneration&lt;/em&gt;). Cependant il y a un problème : la
+  RFC utilise la
+  &lt;a href="https://relaxng.org/compact-20021121.html"&gt;syntaxe compacte&lt;/a&gt;, et
+  cette syntaxe ne peut pas être utilisée par Nokogiri. Heureusement, il est
+  possible de la convertir en syntaxe standard (utilisable par Nokogiri)
+  avec &lt;a href="https://relaxng.org/jclark/trang.html"&gt;trang&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;
+  La migration fut relativement simple, je n’ai pas eu trop de glue à faire
+  moi-même. Seule la conversion des articles en Markdown vers eRuby a été un peu
+  laborieuse, mais ça m’a permis de fixer deux ou trois trucs au passage, donc
+  plutôt positif au final.
+&lt;/p&gt;
+</content>
+  </entry>
+  <entry>
+    <id>tag:grim7reaper.rolinh.ch,2017-09-06:/blog/2017/09/06/compilation-a-la-volee-avec-ruby/</id>
+    <title type="html">Compilation à la volée avec Ruby</title>
+    <published>2017-09-06T00:00:00Z</published>
+    <updated>2017-09-06T00:00:00Z</updated>
+    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2017/09/06/compilation-a-la-volee-avec-ruby/" type="text/html"/>
+    <content type="html">&lt;p&gt;
+  Récemment, je suis tombé sur cette série d’articles d’Eli Bendersky sur la
+  compilation à la volée (&lt;strong&gt;JIT compilation&lt;/strong&gt; : &lt;em&gt;Just-In-Time
+  compilation&lt;/em&gt;) :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-1-an-interpreter/"&gt;Adventures in JIT compilation: Part 1 - an interpreter&lt;/a&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-2-an-x64-jit/"&gt;Adventures in JIT compilation: Part 2 - an x64 JIT&lt;/a&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-3-llvm/"&gt;Adventures in JIT compilation: Part 3 - LLVM&lt;/a&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-4-in-python/"&gt;Adventures in JIT compilation: Part 4 - in Python&lt;/a&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  Eli utilise le C++ pour les trois premières parties, mais dans la quatrième il
+  montre comment faire de la compilation à la volée en Python.
+&lt;/p&gt;
+
+&lt;p&gt;
+  En lisant ça, je me suis demandé « Comment faire l’équivalent en Ruby ? ». Et
+  bien c’est ce que nous allons voir !
+&lt;/p&gt;
+
+&lt;p&gt;
+  &lt;em&gt;
+    Pour des raisons de simplicité et concision, les exemples de codes de cet
+    article ne sont pas portable (limité à Linux/x86_64). Cependant, la démarche
+    présentée est applicable sur d’autres OS/architecture.
+  &lt;/em&gt;
+&lt;/p&gt;
+
+&lt;h2&gt;Comment exécuter du code compilé à la volée en Ruby&lt;/h2&gt;
+
+&lt;p&gt;Les étapes pour exécuter du code compilé à la volée sont les suivantes :&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    Allouer de la mémoire pour y placer le code à exécuter.
+  &lt;/li&gt;
+  &lt;li&gt;
+    Créer une fonction à partir de l’adresse de la zone mémoire contenant le
+    code.
+  &lt;/li&gt;
+  &lt;li&gt;
+    Utiliser la fonction autant que l’on veut.
+  &lt;/li&gt;
+  &lt;li&gt;
+    Libérer la mémoire utilisée.
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;
+  Étant donné que nous allons devoir faire de la programmation relativement bas
+  niveau (allocation mémoire entre autre), nous allons nous reposer sur
+  l’excellent module &lt;a href="https://github.com/ffi/ffi"&gt;ffi&lt;/a&gt; (dont j’ai
+  déjà eu l’occasion de parler
+  &lt;a href="/blog/2013/09/14/ffi-avec-ruby/"&gt;ici&lt;/a&gt;).
+&lt;/p&gt;
+
+&lt;p&gt;
+  En première approche pour l’étape 1 on pourrait penser à
+  &lt;code&gt;FFI::MemoryPointer.new&lt;/code&gt; mais il y a de &lt;strong&gt;très&lt;/strong&gt;
+  fortes chances pour que cela se termine en &lt;em&gt;Segmentation Fault&lt;/em&gt; (ou
+  équivalent).
+&lt;/p&gt;
+
+&lt;p&gt;
+  En effet, pour des raisons de sécurité, la mémoire est généralement allouée
+  soit en « lecture/écriture » (&lt;strong&gt;RW&lt;/strong&gt; : &lt;em&gt;read/write&lt;/em&gt;), soit
+  en « lecture/exécution » (&lt;strong&gt;RX&lt;/strong&gt; :
+  &lt;em&gt;read/execute&lt;/em&gt;)&lt;sup id="fnref:1"&gt;&lt;a href="#fn:1"&gt;1&lt;/a&gt;&lt;/sup&gt;.
+  Et comme, de manière générale, les fonctions d’allocation (&lt;code&gt;malloc&lt;/code&gt;
+  &amp; &lt;em&gt;cie&lt;/em&gt; en C, &lt;code&gt;FFI::MemoryPointer.new&lt;/code&gt; en Ruby, …) renvoient
+  de la mémoire &lt;strong&gt;RW&lt;/strong&gt; nous ne pourrons pas les utiliser pour
+  allouer la mémoire où nous allons placer notre code.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Heureusement, il existe un appel système qui nous permet de spécifier les
+  droits d’une zone mémoire lors de son allocation : &lt;code&gt;mmap&lt;/code&gt;. Cette
+  fonction est extrêmement pratique et a de nombreux cas d’usages, mais dans le
+  cas présent nous allons en avoir une utilisation assez simple :
+&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    Allouer via &lt;code&gt;mmap&lt;/code&gt; une zone mémoire de taille suffisante pour
+    recevoir le code (cette zone sera allouée en &lt;strong&gt;RW&lt;/strong&gt;).
+  &lt;/li&gt;
+  &lt;li&gt;
+    Stocker le code dans cette zone mémoire.
+  &lt;/li&gt;
+  &lt;li&gt;
+    Changer les permissions de la zone mémoire via &lt;code&gt;mprotect&lt;/code&gt; pour la
+    passer en &lt;strong&gt;RX&lt;/strong&gt;.
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+
+&lt;p&gt;
+  Nous pourrions directement allouer la mémoire en &lt;strong&gt;RWX&lt;/strong&gt; (et
+  ainsi éviter d’avoir à appeler &lt;code&gt;mprotect&lt;/code&gt;) mais ce n’est pas une
+  bonne pratique (du point de vue sécurité) d’avoir les droits en
+  écriture &lt;strong&gt;ET&lt;/strong&gt; en exécution en même temps sur une même zone
+  mémoire.
+&lt;/p&gt;
+
+&lt;h3&gt;Wrapper mmap pour Ruby&lt;/h3&gt;
+
+&lt;p&gt;
+  Étant donné que &lt;code&gt;mmap&lt;/code&gt; &amp; &lt;em&gt;cie&lt;/em&gt; ne sont pas disponibles de
+  base en Ruby, contrairement
+  à &lt;a href="https://docs.python.org/3.6/library/mmap.html"&gt;Python&lt;/a&gt;, nous
+  allons faire un petit wrapper
+  nous-même&lt;sup id="fnref:2"&gt;&lt;a href="#fn:2"&gt;2&lt;/a&gt;&lt;/sup&gt;. Ce wrapper ne sera pas
+  exposé publiquement, c’est un détail d’implémentation, et sera manipulé via
+  une classe qui représente une fonction compilée à la
+  volée : &lt;code&gt;JitFunction&lt;/code&gt;.
+&lt;/p&gt;
+
+&lt;p&gt;Mais d’abord, voyons le wrapper en question.&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Wrapper minimaliste autour de mmap &amp; cie&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'ffi'&lt;/span&gt;
+
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;JitFunction&lt;/span&gt;
+
+  &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="err"&gt;…&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+
+  &lt;span class="k"&gt;module&lt;/span&gt; &lt;span class="nn"&gt;Internal&lt;/span&gt;
+    &lt;span class="kp"&gt;extend&lt;/span&gt; &lt;span class="no"&gt;FFI&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Library&lt;/span&gt;
+    &lt;span class="n"&gt;ffi_lib&lt;/span&gt; &lt;span class="no"&gt;FFI&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Library&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;LIBC&lt;/span&gt;
+
+    &lt;span class="n"&gt;attach_function&lt;/span&gt; &lt;span class="s1"&gt;'mmap'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;     &lt;span class="sx"&gt;%i[pointer size_t int int int off_t]&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:pointer&lt;/span&gt;
+    &lt;span class="n"&gt;attach_function&lt;/span&gt; &lt;span class="s1"&gt;'mprotect'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="sx"&gt;%i[pointer size_t int]&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:int&lt;/span&gt;
+    &lt;span class="n"&gt;attach_function&lt;/span&gt; &lt;span class="s1"&gt;'munmap'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;   &lt;span class="sx"&gt;%i[pointer size_t]&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:int&lt;/span&gt;
+
+    &lt;span class="no"&gt;PROT_NONE&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mh"&gt;0x0&lt;/span&gt; &lt;span class="c1"&gt;# Data cannot be accessed.&lt;/span&gt;
+    &lt;span class="no"&gt;PROT_READ&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mh"&gt;0x1&lt;/span&gt; &lt;span class="c1"&gt;# Data can be read.&lt;/span&gt;
+    &lt;span class="no"&gt;PROT_WRITE&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mh"&gt;0x2&lt;/span&gt; &lt;span class="c1"&gt;# Data can be written.&lt;/span&gt;
+    &lt;span class="no"&gt;PROT_EXEC&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mh"&gt;0x4&lt;/span&gt; &lt;span class="c1"&gt;# Data can be executed.&lt;/span&gt;
+
+    &lt;span class="no"&gt;PROT_RW&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;PROT_READ&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="no"&gt;PROT_WRITE&lt;/span&gt;
+    &lt;span class="no"&gt;PROT_RX&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;PROT_READ&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="no"&gt;PROT_EXEC&lt;/span&gt;
+
+    &lt;span class="no"&gt;MAP_SHARED&lt;/span&gt;    &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mh"&gt;0x1&lt;/span&gt;   &lt;span class="c1"&gt;# Share changes.&lt;/span&gt;
+    &lt;span class="no"&gt;MAP_PRIVATE&lt;/span&gt;   &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mh"&gt;0x2&lt;/span&gt;   &lt;span class="c1"&gt;# Changes are private.&lt;/span&gt;
+    &lt;span class="no"&gt;MAP_ANONYMOUS&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mh"&gt;0x20&lt;/span&gt;  &lt;span class="c1"&gt;# Don't use a file.&lt;/span&gt;
+
+    &lt;span class="no"&gt;MAP_FAILED&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;FFI&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Pointer&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:void&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="n"&gt;private_constant&lt;/span&gt; &lt;span class="ss"&gt;:Internal&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Rien de bien compliqué : on déclare les trois fonctions que nous allons
+  utiliser (&lt;code&gt;mmap&lt;/code&gt; pour allouer la mémoire, &lt;code&gt;mprotect&lt;/code&gt;
+  pour changer les permissions et &lt;code&gt;munmap&lt;/code&gt; pour libérer la mémoire)
+  et les constantes dont nous allons avoir besoin (il existe d’autres
+  constantes, vous pouvez consulter &lt;code&gt;man 2 mmap&lt;/code&gt; pour la liste
+  complète).
+&lt;/p&gt;
+
+&lt;p&gt;
+  &lt;strong&gt;Attention&lt;/strong&gt; : ce wrapper n’est pas portable (il ne fonctionnera
+  pas pour Windows, sur d’autres UNIX les valeurs des constantes peuvent être
+  différentes, …).
+&lt;/p&gt;
+
+&lt;h3&gt;La classe JitFunction&lt;/h3&gt;
+
+&lt;p&gt;
+  Voyons maintenant la classe qui va nous permettre de créer et d’exécuter des
+  fonctions compilées à la volée.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Implémentation de la classe JitFunction&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'ffi'&lt;/span&gt;
+
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;JitFunction&lt;/span&gt;
+  &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;initialize&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ret&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="vi"&gt;@size&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;bytesize&lt;/span&gt;
+    &lt;span class="vi"&gt;@address&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Internal&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;mmap&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kp"&gt;nil&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="vi"&gt;@size&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="no"&gt;Internal&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;PROT_RW&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+                             &lt;span class="no"&gt;Internal&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;MAP_PRIVATE&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="no"&gt;Internal&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;MAP_ANONYMOUS&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+                             &lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="s1"&gt;'cannot map memory'&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="vi"&gt;@address&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="no"&gt;Internal&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;MAP_FAILED&lt;/span&gt;
+    &lt;span class="vi"&gt;@address&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;put_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;status&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Internal&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;mprotect&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="vi"&gt;@address&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="vi"&gt;@size&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="no"&gt;Internal&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;PROT_RX&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="s2"&gt;"cannot change memory's permission"&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;status&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;
+    &lt;span class="vi"&gt;@func&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;FFI&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Function&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ret&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="vi"&gt;@address&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;convention: :default&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+
+  &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;call&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="vi"&gt;@func&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;call&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+
+  &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;free&lt;/span&gt;
+    &lt;span class="no"&gt;Internal&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;munmap&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="vi"&gt;@address&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="vi"&gt;@size&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+
+  &lt;span class="k"&gt;module&lt;/span&gt; &lt;span class="nn"&gt;Internal&lt;/span&gt;
+    &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="err"&gt;…&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="n"&gt;private_constant&lt;/span&gt; &lt;span class="ss"&gt;:Internal&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  On peut voir que l’interface de la classe est composée de trois méthodes
+  publiques :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;code&gt;initialize&lt;/code&gt; qui prend en argument le code de la fonction et qui
+    crée un objet &lt;code&gt;FFI::Function&lt;/code&gt;.
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;call&lt;/code&gt; qui permet d’exécuter la fonction.
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;free&lt;/code&gt; qui libère la mémoire utilisée par le code de la fonction.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  Il n’y a pas grand chose à dire sur &lt;code&gt;call&lt;/code&gt; (un simple wrapper
+  autour de la méthode &lt;code&gt;call&lt;/code&gt; de l’objet &lt;code&gt;FFI::Function&lt;/code&gt;)
+  ou &lt;code&gt;free&lt;/code&gt; (un simple wrapper autour de &lt;code&gt;munmap&lt;/code&gt;).
+&lt;/p&gt;
+
+&lt;p&gt;En revanche, &lt;code&gt;initialize&lt;/code&gt; mérite que l’on s’y attarde.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    La ligne 5 récupère la taille, en octet, du code de la fonction.
+  &lt;/li&gt;
+  &lt;li&gt;
+    La ligne 6 alloue la mémoire pour le code via &lt;code&gt;mmap&lt;/code&gt;. On remarque
+    que la mémoire est alloué en &lt;strong&gt;RW&lt;/strong&gt; (comme l’indique le
+    paramètre &lt;code&gt;PROT_RW&lt;/code&gt;). La mémoire allouée n’est pas accessible aux
+    autres processus (utilisation de &lt;code&gt;MAP_PRIVATE&lt;/code&gt; au lieu
+    de &lt;code&gt;MAP_SHARED&lt;/code&gt;) et n’est pas liée à un fichier sur le disque
+    (utilisation de &lt;code&gt;MAP_ANONYMOUS&lt;/code&gt;).
+  &lt;/li&gt;
+  &lt;li&gt;
+    La ligne 9 lève une exception si l’allocation a échouée
+    (&lt;strong&gt;Attention&lt;/strong&gt; : en cas d’erreur &lt;code&gt;mmap&lt;/code&gt; ne renvoie
+    pas &lt;code&gt;NULL&lt;/code&gt; mais une valeur bien spécifique représentée
+    par
+    &lt;code&gt;MAP_FAILED&lt;/code&gt;&lt;sup id="fnref:3"&gt;&lt;a href="#fn:3"&gt;3&lt;/a&gt;&lt;/sup&gt;).
+  &lt;/li&gt;
+  &lt;li&gt;
+    La ligne 10 copie le code de la fonction dans la zone allouée.
+  &lt;/li&gt;
+  &lt;li&gt;
+    Étant donné que nous n’allons plus modifier la mémoire, la ligne 11 change
+    les permissions de la zone mémoire de &lt;strong&gt;RW&lt;/strong&gt;
+    en &lt;strong&gt;RX&lt;/strong&gt; et la ligne 12 lève une exception en cas d’échec.
+  &lt;/li&gt;
+  &lt;li&gt;
+    Finalement, la ligne 13 crée un objet &lt;code&gt;FFI::Function&lt;/code&gt; en
+    précisant le type de retour, le type des arguments et l’adresse du code à
+    exécuter.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3&gt;Test&lt;/h3&gt;
+
+&lt;p&gt;
+  Nous pouvons maintenant tester la classe &lt;code&gt;JitFunction&lt;/code&gt; en reprenant
+  l’exemple utilisé par Eli dans son
+  &lt;a href="https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-4-in-python/"&gt;quatrième article&lt;/a&gt; :
+  une fonction qui ajoute 4 à un entier passé en argument et retourne le résultat.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Exemple d’utilisation de JitFunction&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="kp"&gt;__FILE__&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="vg"&gt;$PROGRAM_NAME&lt;/span&gt;
+  &lt;span class="n"&gt;code&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x48\x89\xf8\x48\x83\xc0\x04\xc3&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;
+  &lt;span class="n"&gt;func&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;JitFunction&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:long&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:long&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;begin&lt;/span&gt;
+    &lt;span class="nb"&gt;puts&lt;/span&gt; &lt;span class="n"&gt;func&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;call&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;100&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;ensure&lt;/span&gt;
+    &lt;span class="n"&gt;func&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;free&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Lorsque l’on exécute ce script, &lt;code&gt;-96&lt;/code&gt; s’affiche. Ça fonctionne \o/
+&lt;/p&gt;
+
+&lt;p&gt;
+  Le code complet de &lt;code&gt;jit.rb&lt;/code&gt; est disponible
+  &lt;a href="/static/code/ruby-jit/jit.rb"&gt;ici&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;h2&gt;Exemple d’utilisation : Brainfuck&lt;/h2&gt;
+
+&lt;p&gt;
+  Afin de montrer un exemple d’utilisation « réel » de la
+  classe &lt;code&gt;JitFunction&lt;/code&gt;, nous allons développer un programme qui va
+  compiler à la volée un programme Brainfuck en assembleur x86_64 pour Linux
+  puis l’exécuter : &lt;code&gt;bf-jit.rb&lt;/code&gt;.
+&lt;/p&gt;
+
+&lt;h3&gt;Point d’entrée&lt;/h3&gt;
+
+&lt;p&gt;Commençons par le commencement : la fonction &lt;code&gt;main&lt;/code&gt;.&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Point d’entrée&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'set'&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Brainfuck's instruction set.&lt;/span&gt;
+&lt;span class="no"&gt;INSTRUCTION_SET&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Set&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'[]&amp;gt;&amp;lt;+-.,'&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;chars&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="nf"&gt;freeze&lt;/span&gt;
+
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="kp"&gt;__FILE__&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="vg"&gt;$PROGRAM_NAME&lt;/span&gt;
+  &lt;span class="nb"&gt;abort&lt;/span&gt; &lt;span class="s1"&gt;'Missing argument: expected filename'&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="no"&gt;ARGV&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;empty?&lt;/span&gt;
+  &lt;span class="n"&gt;bf_code&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;File&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;read&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="no"&gt;ARGV&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]).&lt;/span&gt;&lt;span class="nf"&gt;chars&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;select!&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;c&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="no"&gt;INSTRUCTION_SET&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;include?&lt;/span&gt; &lt;span class="n"&gt;c&lt;/span&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+  &lt;span class="n"&gt;memory&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;FFI&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;MemoryPointer&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:uchar&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;30_000&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="n"&gt;bf_prog&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;JitFunction&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:void&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[],&lt;/span&gt; &lt;span class="n"&gt;compile_bf&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;bf_code&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;memory&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+  &lt;span class="k"&gt;begin&lt;/span&gt;
+    &lt;span class="n"&gt;bf_prog&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;call&lt;/span&gt;
+  &lt;span class="k"&gt;ensure&lt;/span&gt;
+    &lt;span class="n"&gt;bf_prog&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;free&lt;/span&gt;
+    &lt;span class="n"&gt;memory&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;free&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;ul&gt;
+  &lt;li&gt;
+    La ligne 7 vérifie que le script est bien appelé avec un argument (le nom du
+    fichier source Brainfuck).
+  &lt;/li&gt;
+  &lt;li&gt;
+    La ligne 8 lit le contenu du fichier et ne garde que les caractères qui font
+    partie du jeu d’instructions Brainfuck.
+  &lt;/li&gt;
+  &lt;li&gt;
+    La ligne 9 alloue la mémoire pour l’exécution du programme (pour rappel, un
+    programme Brainfuck s’attend à avoir au moins 30 000 octets de mémoire à
+    disposition).
+  &lt;/li&gt;
+  &lt;li&gt;
+    La ligne 10 compile le code source et crée un
+    objet &lt;code&gt;JitFunction&lt;/code&gt;. Étant donné que le programme Brainfuck
+    s’exécute sans interaction avec le reste du script on le représente par une
+    fonction sans argument et avec un type de retour &lt;code&gt;void&lt;/code&gt;.
+  &lt;/li&gt;
+  &lt;li&gt;
+    Finalement, la ligne 12 exécute la fonction et les lignes 14 et 15 libèrent
+    la mémoire allouée.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3&gt;La compilation&lt;/h3&gt;
+
+&lt;p&gt;Pour rappel, les instructions du Brainfuck sont les suivantes :&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;code&gt;&lt;/code&gt; : déplace le pointeur d’une case mémoire vers la
+    droite ;&lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;&amp;lt;&lt;/code&gt; : déplace le pointeur d’une case mémoire vers la
+    gauche ;&lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;+&lt;/code&gt; : incrémente la valeur stockée dans la case mémoire
+    actuellement pointée ;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;-&lt;/code&gt; : décrémente la valeur stockée dans la case mémoire
+    actuellement pointée ;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;.&lt;/code&gt; : affiche le caractère ASCII correspondant à la valeur de la
+    case mémoire actuellement pointée ;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;,&lt;/code&gt; : stocke la valeur ASCII du caractère lu dans la case mémoire
+    actuellement pointée ;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;[&lt;/code&gt; : saute à l’instruction suivant le &lt;code&gt;]&lt;/code&gt;
+    correspondant si la valeur de la case mémoire actuellement pointée est égale
+    à zéro ;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;]&lt;/code&gt; : saute à l’instruction suivant le &lt;code&gt;[&lt;/code&gt;
+    correspondant si la valeur de la case mémoire actuellement pointée est
+    différente de zéro.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  On voit que pour interpréter du code Brainfuck nous allons avoir besoin de
+  deux pointeurs :
+&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    un pointeur sur la mémoire : c’est le pointeur utilisé par la plupart des
+    instructions (toutes sauf &lt;code&gt;[&lt;/code&gt; et &lt;code&gt;]&lt;/code&gt;).
+  &lt;/li&gt;
+  &lt;li&gt;
+    un pointeur sur le code : c’est le pointeur qui permet de savoir quelle est
+    la prochaine instruction à exécuter (il est incrémenté automatiquement après
+    chaque instruction, sauf pour les instructions &lt;code&gt;[&lt;/code&gt; et
+    &lt;code&gt;]&lt;/code&gt; qui peuvent le modifier de manière conditionnelle).
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;
+  Dans le cadre d’un interpréteur, nous devons gérer ces deux pointeurs
+  nous-même. En revanche, dans le cas de la compilation à la volée, nous allons
+  générer du code machine et c’est le processeur qui va s’occuper de savoir
+  quelle est la prochaine instruction à exécuter : nous avons seulement besoin
+  de gérer le pointeur sur la mémoire. Pour représenter ce pointeur nous allons
+  utiliser un registre. Cependant, on ne peut pas utiliser n’importe quel
+  registre : il y a des conventions d’utilisation. En regardant la
+  section &lt;em&gt;Registers&lt;/em&gt; de
+  &lt;a href="https://web.archive.org/web/20200807161717/https://web.stanford.edu/class/archive/cs/cs107/cs107.1202/guide/x86-64.html"&gt;Guide to x86-64&lt;/a&gt;
+  on voit que &lt;code&gt;r10&lt;/code&gt; est un bon choix (sa valeur est sauvegardé par
+  l’appelant, on peut donc l’utiliser comme on le souhaite).
+&lt;/p&gt;
+
+&lt;p&gt;
+  Avec ces informations en tête, nous pouvons esquisser le squelette de notre
+  fonction de compilation.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Prologue et épilogue&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;compile_bf&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;bf&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;memory&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="c1"&gt;# movabs r10, @memory (in little-endian)&lt;/span&gt;
+  &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x49\xBA&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;memory&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;address&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'Q&amp;lt;'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;
+  &lt;span class="n"&gt;bf&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;instruction&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+    &lt;span class="k"&gt;case&lt;/span&gt; &lt;span class="n"&gt;instruction&lt;/span&gt;
+      &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="err"&gt;…&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\xC3&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt; &lt;span class="c1"&gt;# ret&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  On peut voir qu’il y a du code ajouté avant (le prologue) et après
+  (l’épilogue) les instructions générées à partir du code Brainfuck (qui vont
+  être produites dans le bloc &lt;code&gt;each&lt;/code&gt;).
+&lt;/p&gt;
+
+&lt;p&gt;
+  Dans le prologue, nous initialisons le registre &lt;code&gt;r10&lt;/code&gt; avec
+  l’adresse de la mémoire allouée pour l’exécution du programme Brainfuck. Deux
+  remarques :
+&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    les processeurs x86_64 étant &lt;em&gt;little-endian&lt;/em&gt;, nous utilisons le
+    format &lt;code&gt;Q&amp;lt;&lt;/code&gt; pour écrire l’adresse comme un entier
+    64-bit &lt;em&gt;little-endian&lt;/em&gt;.
+  &lt;/li&gt;
+  &lt;li&gt;
+    on utilise la fonction &lt;code&gt;b&lt;/code&gt; de la classe &lt;code&gt;String&lt;/code&gt; pour
+    que notre chaîne de caractères soit traitées comme une suite d’octets (ce
+    qu’elle est) et non pas comme du texte encodé (en UTF-8 par exemple).
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;
+  Dans l’épilogue, nous ajoutons l’instruction &lt;code&gt;ret&lt;/code&gt;. En effet, notre
+  programme Brainfuck étant compilé en une fonction, il ne faut pas oublier
+  l’instruction &lt;code&gt;ret&lt;/code&gt; pour revenir dans le code appelant à la fin de
+  l’exécution.
+&lt;/p&gt;
+
+&lt;h4&gt;Compilation des instructions « simples »&lt;/h4&gt;
+
+&lt;p&gt;
+  Sur les huit instructions du Brainfuck, six peuvent être traduites directement
+  en assembleur, indépendamment du contexte. Les deux dernières (&lt;code&gt;[&lt;/code&gt;
+  et &lt;code&gt;]&lt;/code&gt;) demandent un peu plus d’effort et seront traitées dans la
+  section suivante.
+&lt;/p&gt;
+
+&lt;p&gt;
+  En reprenant la description des instructions de la section précédente et
+  sachant que notre pointeur est stocké dans &lt;code&gt;r10&lt;/code&gt;, nous avons les
+  correspondances suivantes :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code&gt;&gt;&lt;/code&gt; : &lt;code&gt;inc r10&lt;/code&gt;.&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;&amp;lt;&lt;/code&gt; : &lt;code&gt;dec r10&lt;/code&gt;.&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;+&lt;/code&gt; : &lt;code&gt;addb [r10], 1&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;-&lt;/code&gt; : &lt;code&gt;subb [r10], 1&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  Pour l’instruction &lt;code&gt;,&lt;/code&gt; nous devons utiliser l’appel
+  système &lt;code&gt;read&lt;/code&gt; et pour &lt;code&gt;.&lt;/code&gt; nous devons utiliser l’appel
+  système &lt;code&gt;write&lt;/code&gt;.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Pour faire un appel système en assembleur x86_64 sous Linux ce n’est pas très
+  difficile : il suffit de mettre des valeurs dans des registres, puis d’utiliser
+  l’instruction &lt;code&gt;syscall&lt;/code&gt;. Pour savoir quelle valeur mettre dans quel
+  registre, on peut se référer à la page
+  &lt;a href="http://blog.rchapman.org/posts/Linux_System_Call_Table_for_x86_64/"&gt;Linux System Call Table for x86 64&lt;/a&gt;
+  par exemple.
+&lt;/p&gt;
+
+&lt;p&gt;Cela nous donne donc&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Appel système à read&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;mov rax, 0      # On veut appeler read.
+mov rdi, 0      # On lit sur stdin.
+mov rsi, r10    # On veut l’écrire sur la case mémoire actuellement pointée.
+mov rdx, 1      # On veut lire seulement 1 octet.
+syscall
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;et&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Appel système à write&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;mov rax, 1      # On veut appeler write.
+mov rdi, 1      # On écrit sur stdout.
+mov rsi, r10    # On veut écrire la case mémoire actuellement pointée.
+mov rdx, 1      # On veut écrire seulement 1 octet.
+syscall
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Bon, nous avons maintenant l’équivalent en assembleur de nos instructions
+  Brainfuck. Cependant, ce n’est pas suffisant car nous devons générer du code
+  machine directement. Il nous faut donc savoir comment ces instructions sont
+  encodées. Il y a plusieurs façons de faire cela, pour ma part j’ai utilisé
+  &lt;code&gt;rasm2&lt;/code&gt; qui est un utilitaire faisant partie
+  de &lt;a href="https://www.radare.org/r/"&gt;radare2&lt;/a&gt;.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Utilisation de rasm2 pour encoder les instructions&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;% rasm2 -b 64 -a x86.as 'inc r10'
+49ffc2
+% rasm2 -b 64 -a x86.as 'dec r10'
+49ffca
+rasm2 -b 64 -a x86.as 'subb [r10], 1'
+41802a01
+% rasm2 -b 64 -a x86.as 'addb [r10], 1'
+41800201
+
+% rasm2 -b 64 -a x86.as 'mov rax, 1'
+48c7c001000000
+% rasm2 -b 64 -a x86.as 'mov rdi, 1'
+48c7c701000000
+% rasm2 -b 64 -a x86.as 'mov rsi, r10'
+4c89d6
+% rasm2 -b 64 -a x86.as 'mov rdx, 1'
+48c7c201000000
+% rasm2 -b 64 -a x86.as 'syscall'
+0f05
+
+% rasm2 -b 64 -a x86.as 'mov rax, 0'
+48c7c000000000
+% rasm2 -b 64 -a x86.as 'mov rdi, 0'
+48c7c700000000
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  L’option &lt;code&gt;-b&lt;/code&gt; indique la taille des registres et
+  l’option &lt;code&gt;-a&lt;/code&gt; l’architecture (une liste complète est disponible via
+  l’option &lt;code&gt;-L&lt;/code&gt;).
+&lt;/p&gt;
+
+&lt;p&gt;On peut maintenant compiler à la volée les instructions « simples ».&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Fonction de compilation à la volée (sans support des boucles)&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="c1"&gt;# Mapping f(Brainfuck instruction) = x86_64 assembly&lt;/span&gt;
+&lt;span class="no"&gt;INSTRUCTIONS_MAPPING&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+  &lt;span class="s1"&gt;'&amp;gt;'&lt;/span&gt; &lt;span class="o"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x49\xFF\xC2&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+  &lt;span class="s1"&gt;'&amp;lt;'&lt;/span&gt; &lt;span class="o"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x49\xFF\xCA&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+  &lt;span class="s1"&gt;'+'&lt;/span&gt; &lt;span class="o"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x41\x80\x02\x01&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+  &lt;span class="s1"&gt;'-'&lt;/span&gt; &lt;span class="o"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x41\x80\x2A\x01&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+  &lt;span class="s1"&gt;'.'&lt;/span&gt; &lt;span class="o"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mh"&gt;0x48&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC7&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x01&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+          &lt;span class="mh"&gt;0x48&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC7&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC7&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x01&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+          &lt;span class="mh"&gt;0x4C&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x89&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xD6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+          &lt;span class="mh"&gt;0x48&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC7&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC2&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x01&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+          &lt;span class="mh"&gt;0x0F&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x05&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'c*'&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;
+  &lt;span class="s1"&gt;','&lt;/span&gt; &lt;span class="o"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mh"&gt;0x48&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC7&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+          &lt;span class="mh"&gt;0x48&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC7&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC7&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+          &lt;span class="mh"&gt;0x4C&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x89&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xD6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+          &lt;span class="mh"&gt;0x48&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC7&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0xC2&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x01&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x00&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+          &lt;span class="mh"&gt;0x0F&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mh"&gt;0x05&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'c*'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="p"&gt;}.&lt;/span&gt;&lt;span class="nf"&gt;freeze&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;compile_bf&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;bf&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;memory&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x49\xBA&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;memory&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;address&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'Q&amp;lt;'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;
+  &lt;span class="n"&gt;bf&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;instruction&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+    &lt;span class="k"&gt;case&lt;/span&gt; &lt;span class="n"&gt;instruction&lt;/span&gt;
+    &lt;span class="k"&gt;when&lt;/span&gt; &lt;span class="s1"&gt;'&amp;gt;'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'&amp;lt;'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'+'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'-'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'.'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;','&lt;/span&gt;
+      &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="no"&gt;INSTRUCTIONS_MAPPING&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;instruction&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;when&lt;/span&gt; &lt;span class="s1"&gt;'['&lt;/span&gt;
+      &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="err"&gt;…&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="k"&gt;when&lt;/span&gt; &lt;span class="s1"&gt;']'&lt;/span&gt;
+      &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="err"&gt;…&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="k"&gt;else&lt;/span&gt;
+      &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="s2"&gt;"invalid instruction: &lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;instruction&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;
+    &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\xC3&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  On remarque que j’ai ajouté une clause &lt;code&gt;else&lt;/code&gt; au &lt;code&gt;case&lt;/code&gt;.
+  Cela semble inutile au premier abord, car &lt;code&gt;bf&lt;/code&gt; ne contient que des
+  caractères faisant parti du jeu d’instructions du Brainfuck (grâce
+  au &lt;code&gt;select&lt;/code&gt; appliqué dans la fonction &lt;code&gt;main&lt;/code&gt;).
+  Cependant, ce &lt;code&gt;else&lt;/code&gt; est utile pour détecter des erreurs du
+  développeur. Par exemple, dans ma première version du code le
+  caractère &lt;code&gt;.&lt;/code&gt; était présent deux fois dans la
+  clause &lt;code&gt;when&lt;/code&gt; de la ligne 23 et l’instruction &lt;code&gt;,&lt;/code&gt;
+  n’était pas géré. Grâce au &lt;code&gt;else&lt;/code&gt;, l’erreur a été très rapidement
+  mise en évidence (et corrigé !).
+&lt;/p&gt;
+
+&lt;h4&gt;Compilation des boucles&lt;/h4&gt;
+
+&lt;p&gt;
+  Il ne reste plus que deux instructions à gérer : &lt;code&gt;[&lt;/code&gt;
+  et &lt;code&gt;]&lt;/code&gt;, qui permettent de faire des boucles en Brainfuck.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Pour rappel, l’instruction &lt;code&gt;[&lt;/code&gt; saute à l’instruction suivant
+  le &lt;code&gt;]&lt;/code&gt; correspondant si la valeur de la case mémoire actuellement
+  pointée est égale à zéro. En assembleur ça se traduit par :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Instructions assembleur pour [&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;cmpb [r10], 0
+jz offset_vers_l_instruction_suivant_]
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Dans le cas de &lt;code&gt;]&lt;/code&gt; on fait un saut si la valeur est différente de
+  zéro, ce qui donne :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Instructions assembleur pour ]&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;cmpb [r10], 0
+jnz offset_vers_l_instruction_suivant_[
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Le problème étant de calculer les &lt;em&gt;offsets&lt;/em&gt; des sauts (surtout dans le
+  cas de &lt;code&gt;[&lt;/code&gt; car on ne connait pas encore la position
+  du &lt;code&gt;]&lt;/code&gt; correspondant au moment où l’on traite &lt;code&gt;[&lt;/code&gt;).
+&lt;/p&gt;
+
+&lt;p&gt;
+  Pour résoudre ce problème, nous allons avoir besoin d’une pile et nous allons
+  appliquer les opérations suivantes :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    lorsque l’on rencontre l’instruction &lt;code&gt;[&lt;/code&gt; :
+    &lt;ul&gt;
+      &lt;li&gt;
+        on génère l’instruction de comparaison (le &lt;code&gt;cmpb&lt;/code&gt;).
+      &lt;/li&gt;
+      &lt;li&gt;
+        on empile la position courante (&lt;code&gt;jz_pos&lt;/code&gt;) car nous devrons y
+        revenir pour mettre à jour le code généré lorsque l’on trouvera
+        le &lt;code&gt;]&lt;/code&gt; correspondant.
+      &lt;/li&gt;
+      &lt;li&gt;
+        on insère un &lt;em&gt;placeholder&lt;/em&gt; de 6 octets (6 octets car
+        l’instruction de saut &lt;code&gt;jz&lt;/code&gt; est encodée sur 2 octets et
+        l’&lt;em&gt;offset&lt;/em&gt; est encodé sur 4 octets).
+      &lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    lorsque l’on rencontre l’instruction &lt;code&gt;]&lt;/code&gt; :
+    &lt;ul&gt;
+      &lt;li&gt;
+        on génère l’instruction de comparaison (le &lt;code&gt;cmpb&lt;/code&gt;).
+      &lt;/li&gt;
+      &lt;li&gt;
+        on récupère le &lt;code&gt;jz_pos&lt;/code&gt; correspondant (sur le dessus de la
+        pile) : il contient l’adresse du &lt;em&gt;placeholder&lt;/em&gt; à modifier.
+      &lt;/li&gt;
+      &lt;li&gt;
+        on calcule l’&lt;em&gt;offset&lt;/em&gt; du saut pour &lt;code&gt;[&lt;/code&gt; :
+        l’&lt;em&gt;offset&lt;/em&gt; est calculé entre les deux positions situées juste
+        après les instructions de saut elles-mêmes.
+      &lt;/li&gt;
+      &lt;li&gt;
+        on remplace le &lt;em&gt;placeholder&lt;/em&gt; par un &lt;code&gt;jz&lt;/code&gt; avec
+        l’&lt;em&gt;offset&lt;/em&gt; que l’on vient de calculer.
+      &lt;/li&gt;
+      &lt;li&gt;
+        on calcule l’&lt;em&gt;offset&lt;/em&gt; dans l’autre sens pour &lt;code&gt;]&lt;/code&gt; (pour
+        sauter en arrière, vers le début de la boucle) et on génère
+        l’instruction &lt;code&gt;jnz&lt;/code&gt; avec cet &lt;em&gt;offset&lt;/em&gt;.
+      &lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Un petit schéma pour essayer de visualiser tout ça :&lt;/p&gt;
+
+&lt;p&gt;
+  &lt;img src="/static/images/jump_offset.png" class="centered" title="Schéma explicatif du calcul des offsets" alt="Schéma explicatif du calcul des offsets"&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Et le code correspondant :&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Fonction de compilation à la volée&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;compile_bf&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;bf&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;memory&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="n"&gt;stack&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[]&lt;/span&gt;
+  &lt;span class="c1"&gt;# movabs r10, @memory (in little-endian)&lt;/span&gt;
+  &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x49\xBA&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;memory&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;address&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'Q&amp;lt;'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;
+  &lt;span class="n"&gt;bf&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;instruction&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+    &lt;span class="k"&gt;case&lt;/span&gt; &lt;span class="n"&gt;instruction&lt;/span&gt;
+    &lt;span class="k"&gt;when&lt;/span&gt; &lt;span class="s1"&gt;'&amp;gt;'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'&amp;lt;'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'+'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'-'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'.'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;','&lt;/span&gt;
+      &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="no"&gt;INSTRUCTIONS_MAPPING&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;fetch&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;instruction&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;when&lt;/span&gt; &lt;span class="s1"&gt;'['&lt;/span&gt;
+      &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x41\x80\x3A\x00&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt; &lt;span class="c1"&gt;# cmpb [r10], 0&lt;/span&gt;
+      &lt;span class="n"&gt;stack&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="n"&gt;asm&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;size&lt;/span&gt; &lt;span class="c1"&gt;# Save the offset where we will patch the jump.&lt;/span&gt;
+      &lt;span class="c1"&gt;# Insert a placeholder of 6 bytes (2 for JZ + 4 for the address).&lt;/span&gt;
+      &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x0F\x84\x00\x00\x00\x00&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt;
+    &lt;span class="k"&gt;when&lt;/span&gt; &lt;span class="s1"&gt;']'&lt;/span&gt;
+      &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="s1"&gt;'unmatched ]'&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;stack&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;empty?&lt;/span&gt;
+      &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x41\x80\x3A\x00&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt; &lt;span class="c1"&gt;# cmpb [r10], 0&lt;/span&gt;
+      &lt;span class="n"&gt;jz_pos&lt;/span&gt;     &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;stack&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;pop&lt;/span&gt;    &lt;span class="c1"&gt;# Address of the JZ to patch.&lt;/span&gt;
+      &lt;span class="n"&gt;start_loop&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;jz_pos&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;6&lt;/span&gt;   &lt;span class="c1"&gt;# Address of the first instruction of the loop body.&lt;/span&gt;
+      &lt;span class="n"&gt;end_loop&lt;/span&gt;   &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;asm&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;size&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;6&lt;/span&gt; &lt;span class="c1"&gt;# Address of the first instruction after the loop body.&lt;/span&gt;
+      &lt;span class="c1"&gt;# Generate the jump to the start of the loop (using JNZ).&lt;/span&gt;
+      &lt;span class="n"&gt;offset&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;compute_jump_offset&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;end_loop&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;start_loop&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+      &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x0F\x85&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;offset&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'L&amp;lt;'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="c1"&gt;# L&amp;lt; because little endian!&lt;/span&gt;
+      &lt;span class="c1"&gt;# Go back to patch the jump to the end of the loop.&lt;/span&gt;
+      &lt;span class="n"&gt;offset&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;compute_jump_offset&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;start_loop&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;end_loop&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+      &lt;span class="n"&gt;asm&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;jz_pos&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\x0F\x84&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;offset&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'L&amp;lt;'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;else&lt;/span&gt;
+      &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="s2"&gt;"invalid instruction: &lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;instruction&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;
+    &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="s1"&gt;'unmatched ['&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="n"&gt;stack&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;empty?&lt;/span&gt;
+  &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="se"&gt;\xC3&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;b&lt;/span&gt; &lt;span class="c1"&gt;# ret&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  La fonction &lt;code&gt;compute_jump_offset&lt;/code&gt; est une traduction en Ruby de la
+  fonction C++
+  &lt;code&gt;compute_relative_32bit_offset&lt;/code&gt; d’Eli qui est disponible
+  &lt;a href="https://github.com/eliben/code-for-blog/blob/master/2017/bfjit/jit_utils.cpp"&gt;ici&lt;/a&gt;.
+  La seule subtilité c’est que les entiers en Ruby n’ont pas de taille fixe donc
+  il faut bien penser à ne garder que les 32 premiers bits avec un masque.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;La fonction compute_jump_offset&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;compute_jump_offset&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;to&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;to&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;=&lt;/span&gt; &lt;span class="n"&gt;from&lt;/span&gt;
+    &lt;span class="n"&gt;diff&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;to&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="n"&gt;from&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="s1"&gt;'offset too large'&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="n"&gt;diff&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;31&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;diff&lt;/span&gt;
+  &lt;span class="k"&gt;else&lt;/span&gt;
+    &lt;span class="c1"&gt;# Here the diff is negative, so we need to encode it as 2s complement.&lt;/span&gt;
+    &lt;span class="n"&gt;diff&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;from&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="n"&gt;to&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="s1"&gt;'offset too large'&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;diff&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;31&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;~&lt;/span&gt;&lt;span class="n"&gt;diff&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt; &lt;span class="mh"&gt;0xFFFFFFFF&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Voilà ! Notre fonction de compilation est complète. Il n’y a plus qu’a
+  tester :).
+&lt;/p&gt;
+
+&lt;h3&gt;Benchmark&lt;/h3&gt;
+
+&lt;p&gt;
+  Le code complet de &lt;code&gt;bf-jit.rb&lt;/code&gt; est disponible
+  &lt;a href="/static/code/ruby-jit/bf-jit.rb"&gt;ici&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Pour mettre en évidence les avantages de la compilation à la volée en terme de
+  performance, j’ai testé &lt;code&gt;bf-jit.rb&lt;/code&gt; contre deux autres
+  implémentations parmi celles présentées dans
+  &lt;a href="/blog/2010/12/30/interpreteurs-brainfuck/"&gt;mon premier article sur le Brainfuck&lt;/a&gt; :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;a href="/static/code/bfi/rbfi.rb"&gt;rbfi&lt;/a&gt; : un interpréteur naïf
+    écrit en Ruby, par Ouranos.
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;a href="/static/code/bfi/cbfi.tar.xz"&gt;cbfi&lt;/a&gt; : mon interpréteur en
+    C, qui implémente quelques optimisations basiques.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+
+&lt;p&gt;
+  Le programme Brainfuck utilisé pour le benchmark est
+  &lt;a href="/static/code/ruby-jit/primes.bf"&gt;primes.bf&lt;/a&gt; qui est un
+  programme qui calcule les nombres premiers.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Résultats&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;% time ./cbfi "$(cat primes.bf)" &amp;lt;&amp;lt;&amp;lt; 100
+[…] 0,95s user 0,00s system 99% cpu 0,953 total
+
+% time ./rbfi.rb primes.bf &amp;lt;&amp;lt;&amp;lt; 100
+[…] 493,37s user 0,41s system 99% cpu 8:13,87 total
+
+% time ./bf-jit.rb primes.bf &amp;lt;&amp;lt;&amp;lt; 100
+[…] 0,23s user 0,02s system 99% cpu 0,249 total
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Pas mal du tout ! Presque 4x plus rapide que la version C ! Et pourtant notre
+  compilateur est très stupide : il traduit le code instruction par instruction.
+&lt;/p&gt;
+
+&lt;p&gt;
+  D’ailleurs, ce comportement naïf est pénalisant sur certains programmes tel
+  que &lt;a href="/static/code/ruby-jit/hanoi.bf"&gt;hanoi.bf&lt;/a&gt; où mon
+  interpréteur C est plus rapide (grâce à ses optimisations)
+  que &lt;code&gt;bf-jit.rb&lt;/code&gt;. Cela étant dit, il nous suffirait d’implémenter
+  les optimisations décrites dans les articles d’Eli pour que notre compilateur
+  repasse en tête :-)
+&lt;/p&gt;
+
+&lt;h2&gt;Aller plus loin&lt;/h2&gt;
+
+&lt;p&gt;
+  Au lieu d’écrire notre code directement en hexadécimal, on peut utiliser un
+  assembleur (comme &lt;a href="https://www.cr0.org/progs/metasm/"&gt;metasm&lt;/a&gt; ou
+  &lt;a href="https://github.com/seattlerb/wilson"&gt;wilson&lt;/a&gt; par exemple) pour
+  pouvoir utiliser des mnémoniques et améliorer la lisibilité/souplesse du code.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Par exemple, si l’on utilise metasm pour réécrire le petit code d’exemple de
+  &lt;code&gt;jit.rb&lt;/code&gt; on obtient :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Utilisation de metasm&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="kp"&gt;__FILE__&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="vg"&gt;$PROGRAM_NAME&lt;/span&gt;
+  &lt;span class="nb"&gt;require&lt;/span&gt; &lt;span class="s1"&gt;'metasm'&lt;/span&gt;
+
+  &lt;span class="n"&gt;asm&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;lt;-&lt;/span&gt;&lt;span class="no"&gt;EOS&lt;/span&gt;&lt;span class="sh"&gt;
+  mov rax, rdi
+  add rax, 4
+  ret
+&lt;/span&gt;&lt;span class="no"&gt;  EOS&lt;/span&gt;
+  &lt;span class="n"&gt;code&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;Metasm&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;Shellcode&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;assemble&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="no"&gt;Metasm&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="no"&gt;X86_64&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;asm&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="nf"&gt;encoded&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;data&lt;/span&gt;
+  &lt;span class="n"&gt;func&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="no"&gt;JitFunction&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ss"&gt;:long&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:long&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;begin&lt;/span&gt;
+    &lt;span class="nb"&gt;puts&lt;/span&gt; &lt;span class="n"&gt;func&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;call&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;100&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+  &lt;span class="k"&gt;ensure&lt;/span&gt;
+    &lt;span class="n"&gt;func&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;free&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;Ce qui est tout de même un poil plus lisible :)&lt;/p&gt;
+
+&lt;p&gt;
+  On pourrait même aller jusqu’à utiliser LLVM (via
+  &lt;a href="https://github.com/ruby-llvm/ruby-llvm"&gt;ruby-llvm&lt;/a&gt;) pour générer
+  du code optimisé et devenir facilement multi-plateforme au lieu d’être limité
+  aux processeurs x86_64.
+&lt;/p&gt;
+
+&lt;div class="footnotes"&gt;
+  &lt;hr class="weak-hr" /&gt;
+  &lt;ol&gt;
+    &lt;li id="fn:1"&gt;
+      &lt;p&gt;
+        Pour savoir pourquoi et comment, je vous renvoie sur l’article Wikipédia
+        du &lt;a href="https://en.wikipedia.org/wiki/W%5EX"&gt;W^X&lt;/a&gt;.&lt;a href="#fnref:1"&gt;↩&lt;/a&gt;
+    &lt;/p&gt;
+    &lt;/li&gt;
+    &lt;li id="fn:2"&gt;
+      &lt;p&gt;
+        Nous aurions pu utiliser la
+        gem &lt;a href="https://rubygems.org/gems/mmap2"&gt;mmap2&lt;/a&gt;, mais vu que
+        notre cas d’utilisation est relativement simple et limité c’est plus
+        pédagogique de le faire soi-même.&lt;a href="#fnref:2"&gt;↩&lt;/a&gt;
+    &lt;/p&gt;
+    &lt;/li&gt;
+    &lt;li id="fn:3"&gt;
+      &lt;p&gt;
+        &lt;code&gt;mmap&lt;/code&gt; ne peut pas renvoyer &lt;code&gt;NULL&lt;/code&gt; pour signaler
+        une erreur car l’adresse 0 est une valeur de retour valide (en utilisant
+        le flag &lt;code&gt;MAP_FIXED&lt;/code&gt;), cette fonctionnalité
+        de &lt;code&gt;mmap&lt;/code&gt; a d’ailleurs souvent été utilisée pour exploiter
+        des déréférencements de pointeur &lt;code&gt;NULL&lt;/code&gt; dans le noyau
+        (voir &lt;a href="https://blogs.oracle.com/linux/post/much-ado-about-null-exploiting-a-kernel-null-dereference"&gt;
+          cet article
+        &lt;/a&gt; par exemple).&lt;a href="#fnref:3"&gt;↩&lt;/a&gt;
+      &lt;/p&gt;
+    &lt;/li&gt;
+  &lt;/ol&gt;
+&lt;/div&gt;
+</content>
+  </entry>
+  <entry>
+    <id>tag:grim7reaper.rolinh.ch,2016-10-11:/blog/2016/10/11/a-la-recherche-de-lespace-disque-perdu/</id>
+    <title type="html">À la recherche de l’espace (disque) perdu…</title>
+    <published>2016-10-11T00:00:00Z</published>
+    <updated>2016-10-11T00:00:00Z</updated>
+    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2016/10/11/a-la-recherche-de-lespace-disque-perdu/" type="text/html"/>
+    <content type="html">&lt;p&gt;
+  La semaine dernière j’ai aidé à résoudre un problème assez surprenant : une
+  partition racine pleine selon &lt;code&gt;df&lt;/code&gt; (ou
+  &lt;a href="https://projects.gw-computing.net/projects/dfc"&gt;dfc&lt;/a&gt;) :
+&lt;/p&gt;
+
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;df -h&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;FILESYSTEM               (=) USED      FREE (-)  %USED AVAILABLE  TOTAL MOUNTED ON
+[…]
+/dev/dm-0                [====================]   100%     15.6G  15.6G /
+[…]
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Mais lorsque l’on essaye de trouver les coupables via
+  &lt;a href="https://dev.yorhel.nl/ncdu"&gt;ncdu&lt;/a&gt;, la somme est loin de faire
+  16Go :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;ncdu -x&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;    .   3.8GiB [##########] /var
+        1.2GiB [###       ] /srv
+      885.2MiB [##        ] /opt
+      223.0MiB [          ] /lib
+    .  95.4MiB [          ] /etc
+    […]
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;Surprenant !&lt;/p&gt;
+
+&lt;h2&gt;Les fichiers perdus dans les limbes&lt;/h2&gt;
+
+&lt;p&gt;
+  Après réflexion, je me suis souvenu que certains fichiers pouvaient rester
+  bloqués dans les limbes. En effet, il faut savoir que, sous Linux, quand un
+  fichier est supprimé (avec &lt;code&gt;rm&lt;/code&gt; par exemple), il n’est pas
+  réellement supprimé tant qu’au moins un processus utilise ledit fichier. Par
+  conséquent, même si le fichier n’est plus affiché par &lt;code&gt;ls&lt;/code&gt;
+  ou &lt;code&gt;find&lt;/code&gt;, il occupe toujours de l’espace sur le disque.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Pour lister ces fichiers, on ne peut pas utiliser les commandes habituelles
+  telles que &lt;code&gt;ls&lt;/code&gt; ou &lt;code&gt;find&lt;/code&gt;, mais on peut
+  utiliser &lt;code&gt;lsof&lt;/code&gt; qui est une commande qui liste les fichiers ouverts
+  (&lt;code&gt;lsof&lt;/code&gt; =&gt; &lt;em&gt;list open files&lt;/em&gt;). La sortie
+  de &lt;code&gt;lsof&lt;/code&gt; est très verbeuse, heureusement en lisant sa page de
+  manuel (&lt;code&gt;man 8 lsof&lt;/code&gt;) on y trouve l’option &lt;code&gt;L&lt;/code&gt; qui peut
+  être suivi d’un nombre. Lorsque &lt;code&gt;L&lt;/code&gt; est suivi d’un
+  nombre &lt;code&gt;N&lt;/code&gt;, &lt;code&gt;lsof&lt;/code&gt; va uniquement lister les fichiers qui
+  sont référencé un nombre de fois strictement inférieur à &lt;code&gt;N&lt;/code&gt;. Dans
+  notre cas, comme on veut lister les fichiers supprimés (qui ne sont donc plus
+  référencés) il faut utiliser &lt;code&gt;L1&lt;/code&gt; pour lister les fichier ayant 0
+  référence.
+&lt;/p&gt;
+
+&lt;p&gt;
+  En combinant &lt;code&gt;lsof +L1&lt;/code&gt; avec la commande &lt;code&gt;sort&lt;/code&gt; on peut
+  trier par taille pour voir quels sont les fichiers occupant le plus de place.
+&lt;/p&gt;
+
+&lt;p&gt;
+  La commande finale est donc &lt;code&gt;lsof -s +L1 | sort -nk7&lt;/code&gt; ce qui se
+  traduit par : liste (&lt;code&gt;lsof&lt;/code&gt;) la taille (&lt;code&gt;-s&lt;/code&gt;) de tout
+  les fichiers supprimés et encore ouvert (&lt;code&gt;+L1&lt;/code&gt;) et trie
+  (&lt;code&gt;sort&lt;/code&gt;) cette liste de manière numérique (&lt;code&gt;-n&lt;/code&gt;) sur le
+  champs 7 (&lt;code&gt;-k7&lt;/code&gt;, car c’est le septième champs qui est le champ de
+  la taille).
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Exemple de sortie&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;% lsof -s +L1 | sort -nk7
+
+COMMAND  PID        USER   FD   TYPE DEVICE    SIZE NLINK    NODE NAME
+conky   5372 grim7reaper    0u   CHR 136,16             0      19 /dev/pts/16 (deleted)
+conky   5372 grim7reaper    1u   CHR 136,16             0      19 /dev/pts/16 (deleted)
+conky   5372 grim7reaper    2u   CHR 136,16             0      19 /dev/pts/16 (deleted)
+systemd  709 grim7reaper  txt    REG  254,2 1018520     0 1619496 /usr/lib/systemd/systemd (deleted)
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Cette commande a permis de découvrir que l’espace disque était utilisé par des
+  fichiers temporaires de
+  &lt;a href="https://gnometerminator.blogspot.fr/p/introduction.html"&gt;Terminator&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;h2&gt;Terminator et libVTE&lt;/h2&gt;
+
+&lt;p&gt;Reste à savoir pourquoi Terminator utilise autant d’espace disque.&lt;/p&gt;
+
+&lt;p&gt;
+  Tout d’abord il faut savoir que le Terminator en cause ici était configuré
+  pour conserver toutes les sorties des terminaux, sans limite
+  (option &lt;em&gt;Inifinite scrollback&lt;/em&gt;). Le problème c’est que
+  les &lt;em&gt;buffers&lt;/em&gt; des terminaux sont stockés sur disques et donc que plus
+  les terminaux sont utilisés longtemps et plus il y’a de choses affichées
+  dedans, plus l’espace disque occupé va augmenter.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Ce comportement ne vient pas de Terminator lui-même, mais de la
+  &lt;a href="https://github.com/GNOME/vte"&gt;libVTE&lt;/a&gt; qui est une bibliothèque
+  utilisée pour implémenter des émulateurs de terminaux. Ce bug touche donc tout
+  les terminaux basés sur libVTE (Terminator, Gnome-Terminal, xfce4-terminal,
+  guake, …).
+&lt;/p&gt;
+
+&lt;p&gt;
+  Ce comportement existe depuis 2009, il est connu et ne sera probablement pas
+  corrigé, alors même que cela peut poser problème (je vous conseille de lire
+  &lt;a href="http://climagic.org/bugreports/libvte-scrollback-written-to-disk.html"&gt;ce rapport de bug&lt;/a&gt;
+  qui explique bien la situation)…
+&lt;/p&gt;
+
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;
+  Je pense que je vais continuer d’utiliser
+  &lt;a href="https://web.archive.org/web/20161003144517/https://en.wikipedia.org/wiki/Rxvt-unicode"&gt;urxvt&lt;/a&gt; :D, qui est
+  l’un des rares terminaux à bien gérer l’espace insécable fine et qui n’est pas
+  basé sur libVTE. Cette petite mésaventure m’aura au moins fait découvrir un
+  aspect fort utile de &lt;code&gt;lsof&lt;/code&gt;.
+&lt;/p&gt;
+</content>
+  </entry>
+  <entry>
+    <id>tag:grim7reaper.rolinh.ch,2014-09-04:/blog/2014/09/04/pretty-printer-avec-gdb/</id>
+    <title type="html">Pretty-printer avec GDB</title>
+    <published>2014-09-04T00:00:00Z</published>
+    <updated>2014-09-04T00:00:00Z</updated>
+    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2014/09/04/pretty-printer-avec-gdb/" type="text/html"/>
+    <content type="html">&lt;p&gt;
+  Depuis la
+  version 7.0&lt;sup id="fnref:1"&gt;&lt;a href="#fn:1"&gt;1&lt;/a&gt;&lt;/sup&gt; (sortie le
+  2009/10/06), GDB embarque un interpréteur Python cela qui permet d’utiliser
+  Python comme langage de scripting pour étendre les fonctionnalités de GDB.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Dans cet article je vais aborder la création de &lt;em&gt;pretty-printer&lt;/em&gt; en
+  Python.
+&lt;/p&gt;
+
+&lt;h2&gt;Le problème&lt;/h2&gt;
+
+&lt;p&gt;
+  Comme un exemple vaut mieux qu’un long discours, je vais montrer ici un cas
+  pratique : l’affichage d’adresses IP.
+&lt;/p&gt;
+
+&lt;p&gt;Les systèmes POSIX représentent les adresses via deux structures:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;code&gt;in_addr&lt;/code&gt; pour les IPv4 : une structure qui doit contenir au
+    minimum un champ &lt;code&gt;s_addr&lt;/code&gt; de type &lt;code&gt;in_addr_t&lt;/code&gt; (qui est
+    équivalent à &lt;code&gt;uint32_t&lt;/code&gt;).
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;in6_addr&lt;/code&gt; pour les IPv6 : une structure qui doit contenir au
+    minimum un champ &lt;code&gt;s6_addr&lt;/code&gt; de type &lt;code&gt;uint8_t[16]&lt;/code&gt;.
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  Ces informations, parmi d’autres, sont disponibles
+  &lt;a href="https://pubs.opengroup.org/onlinepubs/009695399/basedefs/netinet/in.h.html"&gt;ici&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;p&gt;
+  De par la définition de ces structures, si on veut les afficher dans GDB on
+  n’obtient quelque chose qui n’est pas très lisible pour un humain.
+&lt;/p&gt;
+
+&lt;p&gt;Soit le programme suivant :&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;exemple.c&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#include &amp;lt;stdlib.h&amp;gt;
+&lt;/span&gt;
+&lt;span class="cp"&gt;#include &amp;lt;arpa/inet.h&amp;gt;
+&lt;/span&gt;
+&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="nf"&gt;main&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;void&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="n"&gt;sockaddr_in&lt;/span&gt;  &lt;span class="n"&gt;ipv4&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+    &lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="n"&gt;sockaddr_in6&lt;/span&gt; &lt;span class="n"&gt;ipv6&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;inet_pton&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;  &lt;span class="s"&gt;"82.66.107.250"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;ipv4&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sin_addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;!=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;EXIT_FAILURE&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;inet_pton&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;"2a01:e35:2426:bfa0:215:ff:fe42:7fd3"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+                  &lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;ipv6&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sin6_addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;!=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;EXIT_FAILURE&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;EXIT_SUCCESS&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;Si on lance GDB dessus en utilisant le fichier de commande suivant :&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;command.gdb&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;break example.c:17
+command
+silent
+print ipv4-&amp;gt;sin_addr
+print ipv6-&amp;gt;sin6_addr
+continue
+end
+
+run
+quit
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;On obtient :&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Sortie produite&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;% gdb -q ./example --command=command.gdb 2&amp;gt; /dev/null
+Reading symbols from ./example...done.
+Breakpoint 1 at 0x8065581: file example.c, line 17.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+$1 = {s_addr = 4201333330}
+$2 = {__in6_u = {__u6_addr8 = "*\001\016\065$&amp;amp;\277\240\002\025\000\377\376B", &amp;lt;incomplete sequence \323&amp;gt;, __u6_addr16 = {298, 13582, 9764, 41151, 5378, 65280, 17150, 54143}, __u6_addr32 = {890110250, 2696881700, 4278195458, 3548332798}}}
+[Inferior 1 (process 2043) exited normally]
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Le moins que l’on puisse dire c’est que ce n’est pas
+  super &lt;em&gt;human-friendly&lt;/em&gt; (&lt;code&gt;$1&lt;/code&gt; étant l’IPv4 et &lt;code&gt;$2&lt;/code&gt;
+  l’IPv6).
+&lt;/p&gt;
+
+&lt;h2&gt;Les pretty-printers&lt;/h2&gt;
+
+&lt;p&gt;
+  Nous allons créer un module python &lt;code&gt;my_pp&lt;/code&gt;. Dans le
+  répertoire &lt;em&gt;my_pp&lt;/em&gt;, nous aurons deux fichiers :
+&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;code&gt;netinet.py&lt;/code&gt; qui contiendra le code des &lt;em&gt;pretty-printers&lt;/em&gt;.
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;code&gt;__init__.py&lt;/code&gt; qui se chargera d’enregistrer
+    nos &lt;em&gt;pretty-printers&lt;/em&gt; auprès de GDB.
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;
+  Commençons avec le premier fichier (j’ai omis les &lt;em&gt;docstrings&lt;/em&gt; pour
+  raccourcir le code).
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;netinet.py&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;struct&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;socket&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;AF_INET6&lt;/span&gt;
+
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;gdb&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;lookup_type&lt;/span&gt;
+
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;ipv4Printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'I'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;'s_addr'&lt;/span&gt;&lt;span class="p"&gt;]))&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;ipv6Printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="c1"&gt;# IPv6 addresses have a size of 128 bits (== 16 octets).
+&lt;/span&gt;        &lt;span class="n"&gt;N&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt;
+        &lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;cast&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lookup_type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;"uint8_t"&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;array&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'B'&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;)])&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;Allons y étape par étape.&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Les imports&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;struct&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;socket&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;AF_INET6&lt;/span&gt;
+
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;gdb&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;lookup_type&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Les adresses IP étant stockées sous forme binaire, on importe le
+  module &lt;code&gt;struct&lt;/code&gt; pour pouvoir les manipuler. Le
+  module &lt;code&gt;socket&lt;/code&gt; va nous servir à les convertir en chaîne de
+  caractères&lt;sup id="fnref:2"&gt;&lt;a href="#fn:2"&gt;2&lt;/a&gt;&lt;/sup&gt;. Enfin, on importe le
+  module &lt;code&gt;gdb&lt;/code&gt;.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Pretty-printer pour l’IPv4&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;ipv4Printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'I'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;'s_addr'&lt;/span&gt;&lt;span class="p"&gt;]))&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Lorsque GDB va instancier un objet &lt;code&gt;ipv4Printer&lt;/code&gt;, il va lui passer
+  en argument une structure de type &lt;code&gt;in_addr&lt;/code&gt;. Comme dit
+  précédemment, cette structure contient un champ &lt;code&gt;s_addr&lt;/code&gt; qui est
+  un &lt;code&gt;uint32_t&lt;/code&gt;. Notre méthode d’initialisation se contente donc
+  d’extraire ce champ dans le membre &lt;code&gt;addr&lt;/code&gt; de notre objet.
+&lt;/p&gt;
+
+&lt;p&gt;
+  Ensuite, la méthode &lt;code&gt;to_string&lt;/code&gt; est appelée par GDB à chaque fois
+  qu’il doit afficher un objet de type &lt;code&gt;in_addr&lt;/code&gt;. Cette méthode
+  renvoie la chaîne de caractère représentant l’adresse IP contenue
+  dans &lt;code&gt;addr&lt;/code&gt;.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;Pretty-printer pour l’IPv6&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;ipv6Printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="c1"&gt;# IPv6 addresses have a size of 128 bits (== 16 octets).
+&lt;/span&gt;        &lt;span class="n"&gt;N&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt;
+        &lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;cast&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lookup_type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;"uint8_t"&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;array&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'B'&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;)])&lt;/span&gt;
+
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  En théorie; la version IPv6 devrait être aussi simple que la version IPv4. En
+  théorie… En pratique c’est malheureusement plus compliqué.
+&lt;/p&gt;
+
+&lt;p&gt;
+  En effet, si POSIX requiert que la structure &lt;code&gt;in6_addr_t&lt;/code&gt; possède
+  un champ nommé &lt;code&gt;s6_addr&lt;/code&gt; le fait est que, la plupart du temps, ce
+  membre n’existe pas vraiment: c’est un symbole de préprocesseur. En tant que
+  tel, il n’est pas accessible dans GDB (sauf si on utilise certaines options de
+  compilation bien spécifiques telle que &lt;code&gt;-g3&lt;/code&gt;
+  et &lt;code&gt;-gdwarf-2&lt;/code&gt; par exemple). Pis encore, Windows ne définit pas ce
+  membre du tout (Windows ne cherche pas vraiment à être conforme POSIX).
+&lt;/p&gt;
+
+&lt;p&gt;
+  La solution que j’ai trouvée est de traiter la structure &lt;code&gt;in6_addr&lt;/code&gt;
+  comme un tableau de 16 octets. Cela fonctionne et me semble relativement
+  portable étant donné que la structure &lt;code&gt;in6_addr&lt;/code&gt; est définie comme
+  une union dont l’un des champs est effectivement un &lt;code&gt;uint8_t[16]&lt;/code&gt;
+  au moins sur les systèmes d’exploitation suivant :
+&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;a href="https://github.com/torvalds/linux/blob/master/include/uapi/linux/in6.h"&gt;Linux&lt;/a&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;a href="https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/sys/netinet6/in6.h"&gt;DragonFlyBSD&lt;/a&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;a href="https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms738560(v=vs.85)?redirectedfrom=MSDN"&gt;Windows&lt;/a&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;a href="https://svnweb.freebsd.org/base/stable/9/sys/netinet6/in6.h?revision=244524&amp;view=markup"&gt;FreeBSD&lt;/a&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;a href="https://web.archive.org/web/20160327001511/http://cvsweb.netbsd.org/bsdweb.cgi/src/sys/netinet6/in6.h?rev=1.78&amp;content-type=text/x-cvsweb-markup&amp;only_with_tag=MAIN"&gt;NetBSD&lt;/a&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;
+  La méthode &lt;code&gt;__init__&lt;/code&gt; de notre objet va donc &lt;em&gt;caster&lt;/em&gt; la
+  valeur puis la stocker dans l’attribut &lt;code&gt;addr&lt;/code&gt;. Au niveau de la
+  méthode &lt;code&gt;to_string&lt;/code&gt;, c’est quasiment la même chose que
+  pour &lt;code&gt;ipv4Printer&lt;/code&gt; (on remplace seulement &lt;code&gt;AF_INET&lt;/code&gt;
+  par &lt;code&gt;AF_INET6&lt;/code&gt;).
+&lt;/p&gt;
+
+&lt;p&gt;
+    Enfin, l’enregistrement de nos deux classes se fait dans le fichier
+    &lt;code&gt;__init__.py&lt;/code&gt;.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      &lt;figcaption&gt;__init__.py&lt;/figcaption&gt;
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;gdb.printing&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;RegexpCollectionPrettyPrinter&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;netinet&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;netinet_pp&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
+    &lt;span class="n"&gt;pp&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;RegexpCollectionPrettyPrinter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;"netinet"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;pp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'in_addr'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;  &lt;span class="s"&gt;'^in_addr$'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;  &lt;span class="n"&gt;netinet&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ipv4Printer&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;pp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'in6_addr'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;'^in6_addr$'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;netinet&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ipv6Printer&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;pp&lt;/span&gt;
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  On commence par importer le module &lt;code&gt;gdb.printing&lt;/code&gt;, puis
+  nos &lt;em&gt;pretty-printers&lt;/em&gt;. L’enregistrement se fait via un
+  objet &lt;code&gt;RegexpCollectionPrettyPrinter&lt;/code&gt; (via lequel on peut donner un
+  nom à notre groupe de &lt;em&gt;pretty-printers&lt;/em&gt;) dans lequel nous ajoutons
+  nos &lt;em&gt;pretty-printers&lt;/em&gt;. Lors de l’ajout, on donne un nom, une expression
+  rationnelle qui va définir les noms des types que nous pouvons afficher, puis
+  la classe du &lt;em&gt;pretty-printer&lt;/em&gt;.
+&lt;/p&gt;
+
+&lt;p&gt;Maintenant que le code est fait, voyons comment utiliser tout ça.&lt;/p&gt;
+
+&lt;h2&gt;La mise en œuvre&lt;/h2&gt;
+
+&lt;p&gt;
+  La mise en œuvre est très simple, elle peut se faire via le
+  fichier &lt;em&gt;.gdbinit&lt;/em&gt;. Il suffit d’y ajouter ces lignes :
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;# Python
+python
+
+from sys import path
+from gdb.printing import register_pretty_printer
+
+path.insert(0, '/chemin/vers/répertoire/contenant/my_pp')
+
+import my_pp
+register_pretty_printer(gdb.current_objfile(), my_pp.netinet_pp())
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;Je pense que ça se passe de commentaire.&lt;/p&gt;
+
+&lt;h2&gt;Le résultat&lt;/h2&gt;
+
+&lt;p&gt;Et maintenant, si on lance GDB sur notre exemple on obtient :&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;% gdb -q ./example --command=command.gdb 2&amp;gt; /dev/null
+Reading symbols from ./example...done.
+Breakpoint 1 at 0x8065581: file example.c, line 17.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+$1 = 82.66.107.250
+$2 = 2a01:e35:2426:bfa0:215:ff:fe42:7fd3
+[Inferior 1 (process 2424) exited normally]
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;Ce qui est, il faut l’admettre, bien plus lisible.&lt;/p&gt;
+
+&lt;p&gt;
+  Pour conclure, je mentionnerai que la commande &lt;code&gt;info
+  pretty-printer&lt;/code&gt; permet d’afficher la liste des &lt;em&gt;pretty-printers&lt;/em&gt;
+  actuellement chargé dans GDB. Il est également possible d’utiliser l’affichage
+  « brut » de GDB, sans passer par un &lt;em&gt;pretty-printer&lt;/em&gt; (même s’il en
+  existe un pour le type) en utilisant le modificateur &lt;code&gt;/r&lt;/code&gt; de la
+  commande &lt;code&gt;print&lt;/code&gt; (par exemple &lt;code&gt;print /r toto&lt;/code&gt;).
+&lt;/p&gt;
+
+&lt;p&gt;
+  Voilà, ça sera tout pour cette introduction aux &lt;em&gt;pretty-printers&lt;/em&gt;. La
+  documentation officielle est
+  &lt;a href="https://sourceware.org/gdb/current/onlinedocs/gdb/Pretty-Printing.html"&gt;ici&lt;/a&gt;
+  pour ceux qui veulent approfondir.
+&lt;/p&gt;
+
+&lt;div class="footnotes"&gt;
+  &lt;hr class="weak-hr" /&gt;
+  &lt;ol&gt;
+    &lt;li id="fn:1"&gt;
+      &lt;p&gt;
+        je vous conseille d’utiliser au moins GDB 7.8, les versions antérieures
+        ayant un
+        &lt;a href="https://web.archive.org/web/20160418212343/http://comments.gmane.org/gmane.comp.gdb.patches/94851"&gt;bogue&lt;/a&gt;
+        avec les types définis via &lt;code&gt;typedef&lt;/code&gt;.&lt;a href="#fnref:1"&gt;↩&lt;/a&gt;
+      &lt;/p&gt;
+    &lt;/li&gt;
+    &lt;li id="fn:2"&gt;
+      &lt;p&gt;
+        depuis Python 3.3, on utilise plutôt le module
+        &lt;a href="https://docs.python.org/dev/library/ipaddress.html"&gt;ipaddress&lt;/a&gt;
+        &lt;a href="#fnref:2"&gt;↩&lt;/a&gt;
+      &lt;/p&gt;
+    &lt;/li&gt;
+  &lt;/ol&gt;
+&lt;/div&gt;
+</content>
+  </entry>
+</feed>
+

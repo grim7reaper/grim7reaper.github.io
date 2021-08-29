@@ -1,0 +1,564 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Génération et résolution de labyrinthes parfaits — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2010/12/30/generation-et-resolution-de-labyrinthes-parfaits/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Génération et résolution de labyrinthes parfaits</h1>
+
+  <p><em>Cet article provient de mon ancien site Internet.</em></p>
+
+<h2>Présentation</h2>
+
+<h3>Les labyrinthes parfaits</h3>
+
+<p>
+  Les algorithmes présentés dans cet article ne gèrent que les labyrinthes
+  parfaits. Dans de tels dédales, chaque cellule est reliée aux autres pas un
+  seul et unique chemin élémentaire.
+</p>
+
+<div class="centered">
+  <img src="/static/images/maze/perfect.png"  title="Un labyrinthe parfait" alt="Un labyrinthe parfait">
+  <img src="/static/images/maze/imperfect.png"  title="Un labyrinthe imparfait" alt="Un labyrinthe imparfait">
+</div>
+
+<p>
+  Parmi les deux images précédentes, seule la première est un labyrinthe
+  parfait.
+</p>
+
+<h3>Les algorithmes de génération</h3>
+
+<p>
+  Il existe de nombreux algorithmes permettant la création de labyrinthes
+  parfaits. On peut classer ces algorithmes par rapport :
+</p>
+
+<ul>
+  <li>
+    à leur consommation (en temps, en mémoire) ;
+  </li>
+  <li>
+    aux motifs générés ;
+  </li>
+  <li>
+    à leur mode d’action (création de murs ou de passages) ;
+  </li>
+  <li>
+    au facteur
+    « rivière »<sup id="fnref:1"><a href="#fn:1" class="footnote">1</a></sup>
+    des labyrinthes générés ;
+  </li>
+  <li>
+    à leur type (<em>tree</em> ou <em>set</em>).
+  </li>
+</ul>
+
+<p>
+  En ce qui me concerne, j’ai implémenté les algorithmes en tant que « créateur
+  de passages ». Cela signifie que l’état initial est un labyrinthe où chaque
+  cellule est isolée par quatre murs, puis l’algorithme va ouvrir des passages
+  au fur et à mesure. Ils auraient également pu être mis en oeuvre en tant que
+  « poseur de murs » (un état initial vide, puis création de murs au fur et à
+  mesure), bien que cela aurait demandé quelques adaptations pour <em>Hunt &amp;
+  Kill</em>.
+</p>
+
+<p>
+  Les deux premiers algorithmes présentés sont de type <em>tree</em>. Cela
+  signifie que chaque itération est basée sur la précédente et à chaque étape on
+  a un labyrinthe valide. Le dernier algorithme est de type <em>set</em> ce qui
+  signifie qu’il utilise des ensembles indépendants mais (néanmoins cohérents).
+  On obtient un labyrinthe valide à la fin de l’algorithme, lorsque tous les
+  ensembles sont liés.
+</p>
+
+<h4>Le <em>Growing Tree</em></h4>
+
+<p>
+  C’est un algorithme qui est capable de créer des labyrinthes composés de
+  motifs différents selon la méthode de tirage employée.
+</p>
+
+<p>
+  On commence par prendre une cellule et on l’ajoute dans une liste. Ensuite, on
+  se déplace dans une cellule adjacente à cette dernière à condition qu’elle
+  n’ait jamais été visitée. On ajoute cette cellule à la liste. Puis on choisit
+  une nouvelle cellule dans cette liste, selon la méthode de tirage choisie, et
+  on lui applique le même traitement. Lorsqu’une cellule est entourée de
+  cellules visitées elle est retirée de la liste. L’algorithme se termine quand
+  la liste est vide (le labyrinthe est achevé).
+</p>
+
+<p>
+  La façon de choisir une nouvelle cellule dans la liste doit être choisie parmi
+  les méthodes suivantes :
+</p>
+
+<ul>
+  <li>
+    <em>the most recent</em> : on reprend toujours la dernière cellule ajoutée à
+    la liste. Dans ce cas cet algorithme est identique à celui
+    du <em>backtracking</em> récursif ;
+  </li>
+  <li>
+    <em>random</em> : on tire toujours les cellules au hasard ;
+  </li>
+  <li>
+    <em>last or random</em> : en général on reprend la cellule la plus récente,
+    mais occasionnellement on la tire au hasard. Dans ce cas le labyrinthe aura
+    un facteur « rivière » élevé mais une solution souvent courte et directe ;
+  </li>
+  <li>
+    <em>last n</em> : on tire au hasard parmi les n-dernières cellules ajoutées,
+    dans ce cas le labyrinthe aura un facteur « rivière » bas et une solution
+    longue et sinueuse.
+  </li>
+</ul>
+
+<p>
+  Cet algorithme a une complexité spatiale en <code>O(N)</code>, N étant le
+  nombre de cellules composant le labyrinthe. Cependant, en utilisant la méthode
+  de tirage <em>the most recent</em>, c’est l’algorithme de génération le plus
+  rapide.
+</p>
+
+<p>
+  <img src="/static/images/maze/tree.png" class="centered" title="Labyrinthe généré avec l’algorithme Growing Tree" alt="Labyrinthe généré avec l’algorithme Growing Tree">
+</p>
+
+<h4>Le <em>Hunt &amp; Kill</em></h4>
+
+<p>
+  Il semblerait que ce soit l’un des algorithmes les plus facile à modifier pour
+  essayer d’avoir des motifs originaux car il n’y a aucune règle particulière à
+  appliquer systématiquement.
+</p>
+
+<p>
+  Son mode de fonctionnement est similaire au <em>backtracking</em> récursif,
+  sauf lorsqu’il n’y a plus aucune cellule inexplorée à côté de la cellule
+  courante. Dans ce cas, on passe en mode <em>Hunt</em> et on recherche dans
+  l’ensemble du labyrinthe la première cellule vierge qui côtoie au moins une
+  cellule explorée. À ce moment-là, on la <em>Kill</em> (on la connecte à la
+  cellule explorée adjacente) et on recommence à se déplacer à partir d’elle. Le
+  labyrinthe est terminé si, lorsque que l’on passe en mode <em>Hunt</em>, on ne
+  trouve plus aucune cellule à « chasser ».
+</p>
+
+<p>
+  Cet algorithme ne requiert aucun espace mémoire en plus de celui occupé par le
+  labyrinthe lui-même. Il est donc adapté à la création de grands labyrinthes.
+  Cependant, il faut noter qu’en contrepartie cet algorithme est lent (mais cela
+  pourrait être optimisé, en utilisant un peu plus de mémoire), principalement à
+  cause du temps de chasse des dernières cellules. Les labyrinthes générés par
+  cette méthode présentent un facteur « rivière » élevé (mais pas autant que
+  ceux générés par <em>backtracking</em> récursif). On peut diminuer ce facteur
+  en entrant plus souvent, de manière aléatoire, en mode <em>Hunt</em>.
+</p>
+
+<p>
+  <img src="/static/images/maze/hunt.png" class="centered" title="Labyrinthe généré avec l’algorithme Hunt & Kill" alt="Labyrinthe généré avec l’algorithme Hunt & Kill">
+</p>
+
+<h4>L’algorithme d’Eller</h4>
+
+<p>
+  C’est un algorithme peu gourmand en mémoire. En effet, il crée le labyrinthe
+  ligne après ligne ce qui permet de ne charger que deux lignes en mémoire (la
+  courante et la suivante). Enfin, contrairement aux deux algorithmes
+  précédents, il utilise une approche basée sur des ensembles.
+</p>
+
+<p>
+  Afin d’éviter la création de boucles ou de passages fermés indépendants,
+  chaque cellule fait partie d’un groupe (un groupe peut être composé d’une
+  seule cellule). Un groupe contient toutes les cellules qui sont reliées entre
+  elles par un chemin.
+
+  <br />
+
+  La génération d’une ligne est composée de deux étapes :
+</p>
+
+<ol>
+  <li>
+    examen des cellules adjacentes dans la ligne en cours, puis connexion des
+    cellules (création de passages horizontaux) de manière aléatoire ;
+  </li>
+  <li>
+    examen des cellules entre la ligne courante et la ligne suivante, puis
+    connexion des cellules (création des passages verticaux) de manière
+    aléatoire.
+  </li>
+</ol>
+
+<p>
+  Attention, les connexions ne sont pas <strong>totalement</strong> aléatoires.
+  Elles doivent respecter à quatre règles :
+</p>
+
+<ol>
+  <li>
+    on ne doit pas connecter horizontalement deux cellules appartenant au même
+    groupe (sinon il y a création d’une boucle) ;
+  </li>
+  <li>
+    lorsque l’on réalise une connexion horizontale il faut fusionner les groupes
+    (les cellules sont maintenant liées, elles appartiennent donc au même
+    groupe) ;
+  </li>
+  <li>
+    toutes les cellules appartenant à un groupe d’une cellule doivent participer
+    à la création d’une connexion verticale (sinon elles resteront isolées) ;
+  </li>
+  <li>
+    lorsque l’on a réalisé les connexions verticales, toutes les cellules qui ne
+    font partie d’aucun groupe doivent être placées dans un groupe qui les
+    contient elles seules (afin de les connecter à l’itération suivante, cf.
+    règle 3).
+  </li>
+</ol>
+
+<p>
+  Cependant, ces conditions ne sont pas suffisantes. Au cours de tests, j’ai pu
+  remarquer que, si l’on applique uniquement ces quatre règles, on pouvait
+  observer la formation de groupes de cellules totalement isolés du reste du
+  labyrinthe (et donc la structure obtenue n’est plus parfaite). En effet, s’il
+  y a bien une règle pour empêcher l’apparition de cellules isolées (règle 3),
+  il n’y a rien en ce qui concerne les groupes. Si un groupe de cellules n’a pas
+  au moins un lien vers la ligne suivante il sera irrémédiablement isolé du
+  reste de la structure car il n’y a jamais de retour en arrière et on ne lie
+  pas vers le haut. C’est pour remédier à ce problème que j’ai créé la règle
+  suivante :
+</p>
+
+<ul>
+  <li>
+    tous les groupes de la ligne courante doivent participer à la création d’au
+    moins une connexion verticale (sinon ils resteront isolés).
+  </li>
+</ul>
+
+<p>
+  Au passage, on remarque que cet algorithme est particulièrement adapté à la
+  génération de labyrinthe théoriquement infini (la création s’effectuant ligne
+  après ligne, on n’est pas limité par la quantité de mémoire). Il permet
+  également de générer des labyrinthes de manière incrémentale.
+</p>
+
+<p>
+  <img src="/static/images/maze/eller.png" class="centered" title="Labyrinthe généré avec l’algorithme Eller" alt="Labyrinthe généré avec l’algorithme Eller">
+</p>
+
+<h3>Les algorithmes de résolution</h3>
+
+<p>
+  Il existe de nombreux algorithmes permettant la résolution de labyrinthes. On
+  peut les classer par rapport :
+</p>
+
+<ul>
+  <li>
+    à leur consommation (en temps, en mémoire) ;
+  </li>
+  <li>
+    à l’assurance d’obtenir une solution si elle existe ;
+  </li>
+  <li>
+    aux solutions trouvées :
+    <ul>
+      <li>
+        nombre : l’algorithme trouve une ou toutes les solutions ?
+      </li>
+      <li>
+        qualité : est-ce que l’algorithme trouve le chemin le plus court ?
+
+        <br />
+
+        Ces considérations n’ont bien sûr aucun sens dans le cas des labyrinthes
+        parfaits étant donné que la solution est toujours unique.
+      </li>
+    </ul>
+  </li>
+  <li>
+    à leur fonctionnement (est-ce que l’on se contente de déplacer un ou des
+    points du début à la fin du labyrinthe ou est-ce que l’on considère le
+    dédale dans son ensemble ?) ;
+  </li>
+  <li>
+    sa faisabilité par un être humain (oui, oui mais avec une carte ou non car
+    trop complexe ?) ;
+  </li>
+  <li>
+    à ses contraintes (l’arrivée doit être sur un bord par exemple).
+  </li>
+</ul>
+
+<p>
+  Pour mon solveur, j’ai implémenté deux algorithmes de résolution qui sont
+  différents sur de nombreux points :
+</p>
+
+<ul>
+  <li>
+    la consommation mémoire : le <em>backtracking</em> nécessite une mémoire
+    auxiliaire (pile), pas le <em>dead-end filling</em> ;
+  </li>
+  <li>
+    la vision du labyrinthe : le <em>backtracking</em> n’a pas besoin d’une vue
+    d’ensemble, par opposition au <em>dead-end filling</em> qui nécessite une
+    vision globale pour localiser les impasses ;
+  </li>
+  <li>
+    l’arrêt : le <em>backtracking</em> peut potentiellement se terminer à chaque
+    itération (s’il trouve l’arrivée) alors que le <em>dead-end filling</em>
+    doit parcourir entièrement le labyrinthe pour être sûr d’avoir traité toutes
+    les impasses ;
+  </li>
+  <li>
+    l’approche : le <em>backtracking</em> marque la solution tandis que
+    le <em>dead-end filling</em> marque les passages invalides ;
+  </li>
+  <li>
+    les solutions : le <em>backtracking</em> ne trouve qu’une solution (pas
+    forcément la meilleure), le <em>dead-end filling</em> les trouve toutes.
+  </li>
+</ul>
+
+
+<h4>Le <em>backtracking</em></h4>
+
+<p>
+  Cet algorithme est rapide quel que soit le type du labyrinthe, mais il
+  nécessite l’utilisation d’une pile dont la taille peut atteindre (dans le pire
+  des cas) le nombre de cellules composant le labyrinthe. Il a donc une
+  complexité spatiale en <code>O(N)</code>, N étant le nombre de cellules du
+  labyrinthe.
+</p>
+
+<p>
+  Le principe est extrêmement simple. À chaque étape, trois cas peuvent se
+  présenter :
+</p>
+
+<ol>
+  <li>
+    si l’on rencontre une impasse ou une cellule inexplorable (cellule condamnée
+  ou déjà explorée) on va remonter jusqu’à l’intersection précédente (en
+    dépilant). Chaque cellule dépilée est scellée ;
+  </li>
+  <li>
+    sinon, si on a atteint la sortie alors l’algorithme se termine ;
+  </li>
+  <li>
+    sinon on se déplace dans une des directions libres.
+  </li>
+</ol>
+
+<p>
+  Lorsque l’on essaye un nouveau chemin on le marque, et lorsque l’on se trouve
+  dans le cas 1 (c’est-à-dire que l’on retourne en arrière) on efface les
+  marques que l’on avait placées et on condamne le passage. Lorsque que
+  l’algorithme s’arrête, il ne reste plus qu’un seul chemin marqué : c’est la
+  solution (ou une des solutions, s’il en existe plusieurs).
+</p>
+
+<p>
+  Cette méthode va toujours trouver une solution, si tant est qu’il y en aie
+  une. Cependant, ça ne sera pas forcément la plus courte (ce qui n’est pas un
+  problème dans mon cas, étant donné que la solution est unique).
+</p>
+
+<h4>Le <em>dead-end filling</em></h4>
+
+<p>
+  C’est un algorithme de résolution simple qui est rapide et qui ne requiert
+  aucune mémoire supplémentaire (contrairement à la méthode précédente).
+</p>
+
+<p>
+  On parcourt le labyrinthe et à chaque fois que l’on rencontre une impasse on
+  la remonte jusqu’à arriver à une intersection. Lors de cette remontée, toutes
+  les cellules traversées sont scellées. À la fin, il ne restera que la (cas
+  d’un labyrinthe parfait) ou les solutions.
+</p>
+
+<p>
+  Cet algorithme ne peut pas « couper » accidentellement le chemin entre le
+  début et l’arrivée, puisque chaque étape du processus préserve la topologie du
+  labyrinthe. De plus, le processus ne s’arrêtera pas trop tôt car le résultat
+  final ne peut pas contenir d’impasses.
+</p>
+
+<h2>Téléchargement</h2>
+
+<p>
+  Pour ceux que cela intéresse, le code complet est disponible
+  <a href="/static/code/maze.tar.xz">ici</a>
+</p>
+
+<p>
+  Le code est sous GPLv3. Il est écrit en C89, aucune dépendance particulière
+  n’est requise (hormis l’afficheur, optionnel, qui nécessite la bibliothèque
+  SDL). Le projet est composé de :
+</p>
+
+<ul>
+  <li>
+    deux bibliothèques (<code>libgen</code> et <code>libsolv</code>) qui
+    contiennent les algorithmes précédemment décrits ;
+  </li>
+  <li>trois exécutables :
+    <ul>
+      <li>
+        un générateur de labyrinthes, en CLI ;
+      </li>
+      <li>
+        un solveur de labyrinthes, en CLI ;
+      </li>
+      <li>
+        un afficheur de labyrinthes (les images précédentes proviennent de ce
+        logiciel), en SDL.
+      </li>
+    </ul>
+  </li>
+  <li>
+    une documentation Doxygen.
+  </li>
+</ul>
+
+<p>
+  <strong>Attention</strong>, j’ai écrit ce code il y a au moins trois ans et je
+  n’y ai pas retouché depuis… J’ai uniquement modifié le processus de
+  construction en remplaçant le Makefile fait main par un truc basé sur CMake,
+  mais le code en lui-même est le code original.
+</p>
+
+<p>
+  Cela implique que le code est clairement moins bon que ce que je produit
+  actuellement (le code est commenté en français par exemple…), donc ne soyez
+  pas surpris. Cela dit, ce n’est pas non plus Beyrouth (il y a très peu de
+  <em>warnings</em> même avec gcc et clang en mode parano’), le code est
+  relativement propre (surtout pour mon niveau de l’époque sachant que ce fut
+  mon premier projet en C d’une taille notable).
+</p>
+
+<p>
+  Dans les trucs un peu sympa à voir dans le code, il y a la représentation
+  assez compacte d’une cellule de labyrinthe (beaucoup d’info’ dans seulement 8
+  bits). Rien de très original, mais à l’époque j’étais assez content de moi (le
+  zoom et le défilement du labyrinthe dans l’afficheur m’avait aussi demandé du
+  boulot, même si rétrospectivement ce n’est pas un truc monstrueux non plus).
+</p>
+
+<h2>Liens externes</h2>
+
+<ul>
+  <li>
+    <a href="https://web.archive.org/web/20181119010810/https://www.ilay.org/yann/articles/maze/">Un article</a> intéressant et
+    abordable sur la génération de labyrinthe (je me suis fortement inspiré de
+    la structure de donnée présentée).
+  </li>
+  <li>
+    <a href="https://www.astrolog.org/labyrnth/algrithm.htm">Un site</a> très
+    complet sur les labyrinthes et les algorithmes associés.
+  </li>
+</ul>
+
+<div class="footnotes">
+  <hr class="weak-hr" />
+  <ol>
+    <li id="fn:1">
+      <p>
+        Le facteur « rivière » est lié à la densité d’impasses et de carrefours
+        dans un labyrinthe. Un labyrinthe avec un facteur « rivière » faible va
+        comporter beaucoup d’impasses tandis qu’un labyrinthe avec un facteur
+        « rivière » élevé aura moins d’impasses (mais elles seront plus
+        longues).<a href="#fnref:1">↩</a>
+      </p>
+    </li>
+  </ol>
+</div>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2010-12-30T00:00:00Z"
+            itemprop="datePublished">
+        2010-12-30
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#c" rel="tag">C</a> <a href="/blog/tags/#sdl" rel="tag">SDL</a> <a href="/blog/tags/#algorithmes" rel="tag">Algorithmes</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

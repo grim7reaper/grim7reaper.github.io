@@ -1,0 +1,295 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.2" />
+
+    <title>Interpréteurs Brainfuck — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2010/12/30/interpreteurs-brainfuck/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>A Code Craftsman</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.rolinh.ch" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Interpréteurs Brainfuck</h1>
+
+  <p><em>Cet article provient de mon ancien site Internet.</em></p>
+
+<h2>Le Brainfuck c’est quoi ?</h2>
+
+<p>
+  Le Brainfuck est un langage de programmation quasiment imbitable qui se résume
+  à huit instructions.
+</p>
+
+<ul>
+  <li>
+    <code>&gt;</code> : déplace le pointeur d’une case mémoire vers la droite ;
+  </li>
+  <li>
+    <code>&lt;</code> : déplace le pointeur d’une case mémoire vers la gauche ;
+  </li>
+  <li>
+    <code>+</code> : incrémente la valeur stockée dans la case mémoire
+    actuellement pointée ;
+  </li>
+  <li>
+    <code>-</code> : décrémente la valeur stockée dans la case mémoire
+    actuellement pointée ;
+  </li>
+  <li>
+    <code>.</code> : affiche le caractère ASCII correspondant à la valeur de la
+    case mémoire actuellement pointée ;
+  </li>
+  <li>
+    <code>,</code> : stocke la valeur ASCII du caractère lu dans la case mémoire
+    actuellement pointée ;
+  </li>
+  <li>
+    <code>[</code> : saute à l’instruction suivant le <code>]</code>
+    correspondant si la valeur de la case mémoire actuellement pointée est égale
+    à zéro ;
+  </li>
+  <li>
+    <code>]</code> : saute à l’instruction suivant le <code>[</code>
+    correspondant si la valeur de la case mémoire actuellement pointée est
+    différente de zéro.
+  </li>
+</ul>
+
+<p>
+  Malgré ce jeu d’instructions limité, il est Turing-complet. Il est donc
+  possible, théoriquement, de coder en Brainfuck tout ce que l’on peut coder
+  avec d’autres langages plus « traditionnels ».
+</p>
+
+<p>
+  C’est un langage qui a beaucoup de petits camarades tous plus illisible les
+  uns que les autres. Si ça vous amuse, je vous conseille de faire un tour sur
+  <a href="https://esolangs.org/wiki/Language_list">Esolang</a>
+</p>
+
+<h2>Et alors ?</h2>
+
+<p>
+  La première question qui peut venir à l’esprit c’est « Pourquoi se faire chier
+  à coder un interpréteur Brainfuck ? »
+</p>
+
+<p>
+  D’abord, parce que cela occupe. Ensuite, ça permet de bosser par la pratique
+  un langage de programmation. Enfin, ça montre un peu (je dis bien un peu)
+  comment fonctionne un interpréteur (certes très basique). Et puis, si on
+  devait se contenter des choses utiles, on ne ferait pas grand-chose…
+</p>
+
+<p>
+  En fait, tout est parti de cet innocent
+  <a href="https://forum.ubuntu-fr.org/viewtopic.php?pid=3572398#p3572398">post</a>
+  sur le TdCT (Topic des Couche-Tard). Par la suite, tshirtman s’est lancé dans
+  une
+  <a href="https://forum.ubuntu-fr.org/viewtopic.php?pid=3572505#p3572505">traduction en Python 2</a>.
+  Enfin, le phénomène a migré dans le
+  <a href="https://forum.ubuntu-fr.org/viewtopic.php?pid=3572593#p3572593">TdCCT</a>
+  (Topic des Codeurs Couche-Tard) avec \\Ouranos// et son implémentation en
+  Ruby.
+  Finalement, tout le monde y est allé de sa petite implémentation.
+</p>
+
+<p>Au final, on a eu :</p>
+<ul>
+  <li>
+    Une version Python 2 (pas tout à fait fonctionnelle) par tshirtman ;
+  </li>
+  <li>
+    Une version C par Pylade (Édit du 2019/11/10 : elle n’est plus disponible en
+    ligne) ;
+  </li>
+  <li>
+    Une version Ruby 1.8 et
+    <a href="/static/code/bfi/rbfi.rb">1.9</a>
+    par \\Ouranos//
+    (malgré mon ignorance totale de Ruby, j’ai contribué à son <em>debug</em>,
+    surtout la version 1.9) ;
+  </li>
+  <li>
+    <a href="/static/code/bfi/jbfi.tar.xz">Une version Java</a>
+    par helly ;
+  </li>
+  <li>
+    <a href="/static/code/bfi/pbfi.pl">Une version Perl 5</a>
+    par moi ;
+  </li>
+  <li>
+    <a href="/static/code/bfi/cppbfi.cpp">Une version C++</a>
+    par moi.
+  </li>
+</ul>
+
+<h2>Comment ça fonctionne ?</h2>
+
+<p>
+  Étant donné qu’il n’existe pas de norme Brainfuck, on est assez libre au
+  niveau de l’implémentation. La seule chose requise est une mémoire d’au moins
+  30 000 cases (une case faisant au moins un octet) initialisées à zéro.
+
+  <br />
+
+  Personnellement je suis parti sur cette base, mais certains ont implémentés un
+  interpréteur avec mémoire « infinie » (Pylade en l’occurence) ou avec une
+  mémoire circulaire.
+</p>
+
+<p>
+  J’ai utilisé une implémentation relativement naïve. Je commence par charger le
+  code en mémoire. Ensuite, j’effectue une première passe pour construire une
+  table de sauts. Enfin, je fais une seconde passe où je lis et j’exécute le
+  code instruction par instruction.
+
+  <br />
+
+  La table de sauts est construite à l’arrache, il faut bien le dire, car
+  j’utilise deux tables de hachage (alors que l’on pourrait s’en sortir avec une
+  seule, mais ça demande un peu plus de lignes de codes) ce qui gaspille de la
+  mémoire.
+</p>
+
+<p>
+  L’implémentation en Perl a des performances plutôt moyennes, mais bon je l’ai
+  vraiment faite pour le fun. Le fait de tenir en 42 lignes était, ici, plus
+  important que la performance.
+</p>
+
+<p>
+  En revanche, la version C++ met l’accent sur l’efficacité (enfin pas trop non
+  plus, l’objectif principal étant d’avoir un code court) au niveau temps de
+  calcul (je n’ai pas vraiment optimisé l’occupation mémoire, je sais que l’on
+  peut faire mieux). Si j’ai codé cette version C++, c’est uniquement pour avoir
+  un interpréteur plus rapide que celui de Pylade.
+</p>
+
+<p>
+  <strong>Édit du 13/07/2011</strong> : Pylade a publié une nouvelle version de
+  son interpréteur Brainfuck qui est maintenant plus rapide que ma version C++.
+</p>
+
+<p>
+  <strong>Édit du 06/01/2012</strong> : J’ai développé une version C plus
+  performante que celle de Pylade. Plus d’info
+  <a href="https://forum.ubuntu-fr.org/viewtopic.php?pid=7715771#p7715771">ici</a>.
+</p>
+
+<h2>Téléchargements</h2>
+
+<p>
+  Ayant codé ça plus pour le fun qu’autre chose, le code est loin d’être un
+  modèle de présentation et d’optimisation (au contraire). Le but premier que je
+  m’étais fixé étant le nombre de lignes (42 pour le Perl et 100 pour le C++).
+  En revanche, la version C apporte un début d’intelligence en essayant
+  d’optimiser (très basiquement) le code avant de l’interpréter.
+</p>
+
+<ul>
+  <li><a href="/static/code/bfi/pbfi.pl">Version en Perl 5</a></li>
+  <li><a href="/static/code/bfi/cppbfi.cpp">Version en C++</a></li>
+  <li><a href="/static/code/bfi/cbfi.tar.xz">Version en C</a></li>
+</ul>
+
+<h2>Liens externes</h2>
+
+<ul>
+  <li>
+    <a href="https://esolangs.org/wiki/Brainfuck">Un article</a> sur le Brainfuck ;
+  </li>
+  <li>
+    <a href="https://sange.fi/esoteric/brainfuck/bf-source/prog/">Des codes sources</a>
+    en Brainfuck. Utile pour pouvoir tester les interpréteurs (ou faire des
+    benchmarks).
+  </li>
+  <li>
+    <a href="https://sabbatical-year.blogspot.com/search/label/brainfuck">Une série d’articles</a>
+    sur l’implémentation et l’optimisation d’un interpréteur Brainfuck
+    (implémentation en Haskell). Le cheminement de l’implémentation naïve jusqu’à
+    la version finale est intéressant (attention, le premier article est tout en
+    bas).
+  </li>
+  <li>
+    <a href="https://openclassrooms.com/forum/sujet/atelier-tous-langages-codez-un-interpreteur-de-brainfuck-16644">Un topic</a>
+    où vous pourrez voir diverses implémentations d’interpréteurs (mais aussi de
+    compilateurs) Brainfuck réalisés en divers langages.
+  </li>
+</ul>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2010-12-30T00:00:00Z"
+            itemprop="datePublished">
+        2010-12-30
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2021 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>
