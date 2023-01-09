@@ -1,0 +1,1299 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+  <head>
+    <meta charset="utf-8" />
+
+    <meta name="language"  content="fr" />
+    <meta name="author"    content="Sylvain Laperche" />
+    <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content="Nanoc 4.12.14" />
+
+    <title>Harder, Better, Faster, Stronger version of Uber H3 in Rust: The Hydronium Project — grim7reaper</title>
+
+    <link rel="icon"       type="image/png" href="/favicon.png" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.github.io/blog/2023/01/09/the-hydronium-project/" />
+    <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
+
+    <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
+    <link rel="stylesheet" type="text/css"  href="/syntax.css" />
+  </head>
+  <body>
+    <header id="blog-title">
+      <h1><a href="/">grim7reaper</a></h1>
+      <p>Un artisan du code</p>
+    </header>
+    <nav id="navbar">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/blog/tags">Catégories</a></li>
+        <li><a href="/about">À propos</a></li>
+        <li><a href="/atom.xml">Flux Atom</a></li>
+      </ul>
+
+      <div id="search-container">
+        <form action="https://duckduckgo.com/" method="get">
+          <input
+            type="hidden"
+            name="sites"
+            value="grim7reaper.github.io" />
+          <input
+            class="search"
+            type="text"
+            name="q"
+            placeholder="Recherche…" /><!--
+          --><button type="submit">↩</button>
+        </form>
+      </div>
+    </nav>
+
+    
+
+<article class="entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <h1>Harder, Better, Faster, Stronger version of Uber H3 in Rust: The Hydronium Project</h1>
+
+  <p>
+  Since this article will probably have more reach than my usual rambling, It'll
+  be written in English (but let's not make a habit of it).
+</p>
+<p>
+  By the way, in case you missed it, the title is a reference to this
+  <a href="https://genius.com/Daft-punk-harder-better-faster-stronger-lyrics">song</a>.
+</p>
+
+<h2>h3o: the oxidized H3</h2>
+
+<p>
+  <a href="https://github.com/HydroniumLabs/h3o">h3o</a> is not a binding (like
+  <a href="https://github.com/nmandery/h3ron">h3ron</a>) but a complete rewrite
+  of <a href="https://github.com/uber/h3">H3</a>.
+</p>
+<p>
+  The goals of this rewrite in Rust were:
+  <ul>
+    <li>
+      an easier integration in Rust projects, especially when targeting WASM
+    </li>
+    <li>
+      to provide safer API, leveraging strong typing (e.g. having distinct types for each
+      index mode)
+    </li>
+    <li>
+      to be faster (or at least as fast) than the reference library
+    </li>
+    <li>
+      to cover 100% of 4.0 API (current release at the time the project started)
+    </li>
+  </ul>
+</p>
+
+<h3>Testing</h3>
+
+<p>
+  Differential testing has been used to reduce the risk of regression/divergence
+  from the reference implementation.
+</p>
+<p>
+  Each public function of <code>h3o</code> has been tested, exhaustively on
+  coarser resolutions when possible, against its counterpart in <code>H3</code>
+  (through the
+  <a href="https://github.com/nmandery/h3ron/tree/main/h3ron-h3-sys">h3ron-sys</a>
+  binding), except for geometrical functions (it's been postponed) because the
+  conversion and robust comparison were a bit troublesome to implement.
+</p>
+<p>
+  In addition to the differential test suite (756 tests), there are 166
+  integration tests (covering extra features no present in <code>H3</code> such
+  as GeoJSON helpers) and 42 unit tests (for internal functions).
+</p>
+<p>
+  Last but not least, 15 fuzz targets also have been implemented (doesn't cover
+  the whole public API yet though, but it's a start).
+</p>
+
+<h3>Performance</h3>
+
+<p>
+  A benchmark suite composed of 911 test cases has been developed, covering the
+  whole public API and comparing <code>h3o</code> performance against the
+  <code>H3</code> reference implementation (through the <code>h3ron-sys</code>
+  crate which is expected to have no overhead).
+</p>
+<p>
+Full results are available
+<a href="/static/misc/critcmp.txt">here</a>.
+You can also run the benchmarks locally:
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>cargo bench --bench h3 --all-features -- --save-baseline h3 '/h3/'
+cargo bench --bench h3 --all-features -- --save-baseline h3 '/h3$'
+
+cargo bench --bench h3 --all-features -- --save-baseline h3o '/h3o/'
+cargo bench --bench h3 --all-features -- --save-baseline h3o '/h3o$'
+
+critcmp h3 h3o -g '(.+/)(?:h3o?)(/?.*)'
+</pre>
+      </div>
+    </figure>
+
+
+<h4>Overview</h4>
+
+<p>
+  Before diving into the results, a quick overview:
+  <ul>
+    <li>5 tests where the performance is equals</li>
+    <li>44 tests where <code>H3</code> still outperform <code>h3o</code></li>
+    <ul>
+      <li>
+        34 tests where <code>H3</code> is marginally faster (the difference is
+        10% or less)
+      </li>
+      <li>
+        5 tests where <code>H3</code> is faster (the difference is between 11%
+        and 20%)
+      </li>
+      <li>
+        4 tests where <code>H3</code> is noticeably faster (the difference is up
+        to 50%)
+      </li>
+      <li>
+        1 test where <code>H3</code> is twice as fast
+        (<code>gridDiskDistancesSafe/Hexagon/1</code>)
+      </li>
+    </ul>
+    <li>862 tests where <code>h3o</code> outperforms <code>H3</code></li>
+    <ul>
+      <li>166 with a difference between 1% and 10%</li>
+      <li>195 with a difference between 11% and 20%</li>
+      <li>163 with a difference between 21% and 50%</li>
+      <li>48 where <code>h3o</code> is up to 2x faster</li>
+      <li>93 where <code>h3o</code> is up to 3x faster</li>
+      <li>84 where <code>h3o</code> is up to 4x faster</li>
+      <li>43 where <code>h3o</code> is up to 5x faster</li>
+      <li>46 where <code>h3o</code> is up to 10x faster</li>
+      <li>24 where <code>h3o</code> is up to 10x faster</li>
+    </ul>
+  </ul>
+</p>
+
+<p>
+  Most of the tests where <code>h3o</code> is slower are limited to coarse
+  resolutions (&lt; 3 for half of them) which are usually fast anyway (still,
+  would be nice if we could be on par here as well), the only exceptions being:
+  <ul>
+    <li>
+      <code>cellToLatLng</code> for class Ⅲ resolutions especially on
+      pentagons.
+    </li>
+    <li><code>latLngToCell</code> for pentagon</li>
+  </ul>
+  <br/>
+  Will probably dive into those two cases as they shouldn't be slower.
+</p>
+<p>
+  Let's now look closer at some interesting benchmark results, and describe the
+  optimizations behind them.
+</p>
+
+<h4>cellToBoundary</h4>
+<p>
+  <img src="/static/images/h3o/cellToBoundary.png" class="centered" title="cellToBoundary benchmark" alt="cellToBoundary benchmark">
+</p>
+<p>
+  Not a huge win on this one (up to 40% for the finer resolutions), but we can
+  see the impact of edge-crossing handling for pentagons at resolutions of class
+  Ⅲ (class Ⅱ aren't impacted because at those resolutions edges have vertices on
+  the same icosahedron face).
+</p>
+
+<h4>cellToChildrenSize</h4>
+<p>
+  <img src="/static/images/h3o/cellToChildrenSize.png" class="centered" title="cellToChildrenSize benchmark" alt="cellToChildrenSize benchmark">
+</p>
+<p>
+  <code>H3</code> is using a formula to compute it on the fly (you can notice a
+  small jump at each power of two due to their <code>ipow</code> implementation)
+  whereas <code>h3o</code> uses a lookup table of pre-computed values.
+  <br />
+  Same thing for <code>getNumCells</code>.
+</p>
+
+<h4>cellToLatLng</h4>
+<p>
+  <img src="/static/images/h3o/cellToLatLng.png" class="centered" title="cellToLatLng benchmark" alt="cellToLatLng benchmark">
+</p>
+<p>
+  One of the cases where <code>H3</code> is consistently faster than
+  <code>h3o</code>: for pentagons at resolutions of class Ⅲ.
+  <br/>
+  I've probably messed up something in this specific case, will have to dig into
+  it because there is no reason why we would be faster on class Ⅱ but not class
+  Ⅲ.
+</p>
+
+<h4>cellToParent</h4>
+<p>
+  <img src="/static/images/h3o/cellToParent.png" class="centered" title="cellToParent benchmark" alt="cellToParent benchmark">
+</p>
+<p>
+  <code>H3</code> uses a loop to "clear" (set to <code>0b111</code>) the
+  trailing unused bits at the targeted parent resolution, resulting in an
+  <code>O(n)</code> algorithm where <code>n</code> is the difference between the
+  child cell resolution and the one of the requested parent.
+  <br/>
+  The benchmark uses a cell index at resolution 15 as input, that's why the
+  coarser the resolution gets, the slower the algorithm is.
+  <br/>
+  On the other hand, <code>h3o</code> uses a constant-time approach based on bit
+  twiddling, hence the flatline.
+</p>
+
+<h4>compactCell</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Test case</th>
+      <th><code>H3</code></th>
+      <th><code>h3o</code></th>
+      <th>Speedup</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>NoCompaction</td>      <td>326.5±3.07µs</td><td>243.9±1.13µs</td><td>1.34</td></tr>
+    <tr><td>PartialCompaction</td> <td>326.0±2.56µs</td><td>206.6±1.14µs</td><td>1.58</td></tr>
+    <tr><td>FullCompaction</td>    <td>318.4±4.66µs</td><td>134.0±0.78µs</td><td>2.38</td></tr>
+  </tbody>
+</table>
+<p>
+  The <code>h3o</code> implementation is not a port of the <code>H3</code>
+  algorithm.
+  <br/>
+  <code>H3</code> iteratively compacts the input set until it reaches a stable
+  (i.e. non-compactable) state.
+  <br/>
+  <code>h3o</code> starts by sorting the input set, and then compacts chunks of
+  adjacent indexes (from coarser to finer resolution), effectively galloping
+  through the data (hence the bigger speedup on a fully compactable set) in a
+  single pass.
+</p>
+
+<h4>gridDiskDistancesSafe</h4>
+<p>
+  <img src="/static/images/h3o/gridDiskDistancesSafe.png" class="centered" title="gridDiskDistancesSafe benchmark" alt="gridDiskDistancesSafe benchmark">
+</p>
+<p>Here are the measures for hexagons (pentagons are in the same ballpark).</p>
+<table>
+  <thead>
+    <tr>
+      <th>Test case</th>
+      <th><code>H3</code></th>
+      <th><code>h3o</code></th>
+      <th>Speedup</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Hexagon/0</td>   <td>   3.6±0.08ns</td> <td>   1.2±0.01ns</td>  <td> 2.87</td></tr>
+    <tr><td>Hexagon/1</td>   <td>  85.2±2.56ns</td> <td> 170.7±2.66ns</td>  <td> 0.50</td></tr>
+    <tr><td>Hexagon/2</td>   <td> 448.9±6.28ns</td> <td> 635.7±8.90ns</td>  <td> 0.70</td></tr>
+    <tr><td>Hexagon/3</td>   <td>1724.1±22.38ns</td><td>1504.1±6.71ns</td>  <td> 1.15</td></tr>
+    <tr><td>Hexagon/4</td>   <td>   4.6±0.05µs</td> <td>   2.8±0.02µs</td>  <td> 1.67</td></tr>
+    <tr><td>Hexagon/5</td>   <td>  16.0±0.46µs</td> <td>   4.5±0.03µs</td>  <td> 3.52</td></tr>
+    <tr><td>Hexagon/6</td>   <td>  21.4±0.69µs</td> <td>   6.6±0.03µs</td>  <td> 3.24</td></tr>
+    <tr><td>Hexagon/7</td>   <td>  26.2±0.66µs</td> <td>   9.6±0.16µs</td>  <td> 2.72</td></tr>
+    <tr><td>Hexagon/8</td>   <td>  74.8±0.79µs</td> <td>  13.4±0.21µs</td>  <td> 5.60</td></tr>
+    <tr><td>Hexagon/9</td>   <td>  58.1±0.59µs</td> <td>  16.1±0.16µs</td>  <td> 3.62</td></tr>
+    <tr><td>Hexagon/10</td>  <td> 150.4±1.64µs</td> <td>  20.5±0.13µs</td>  <td> 7.34</td></tr>
+    <tr><td>Hexagon/20</td>  <td>1658.4±15.81µs</td><td>  90.5±0.59µs</td>  <td>18.33</td></tr>
+    <tr><td>Hexagon/30</td>  <td>   3.3±0.06ms</td> <td> 219.7±2.03µs</td>  <td>14.87</td></tr>
+    <tr><td>Hexagon/40</td>  <td>  11.2±0.04ms</td> <td> 480.3±79.36µs</td> <td>23.35</td></tr>
+    <tr><td>Hexagon/50</td>  <td>  28.3±0.12ms</td> <td> 614.1±42.11µs</td> <td>46.06</td></tr>
+    <tr><td>Hexagon/100</td> <td> 140.3±0.43ms</td> <td>   2.6±0.11ms</td>  <td>54.98</td></tr>
+  </tbody>
+</table>
+
+<p>
+  This is one of the functions where <code>h3o</code> shines the most, which is a
+  bit surprising considering the implementations are similar.
+</p>
+<p>
+  One reason could be that the <code>H3</code> code uses recursion, whereas
+  <code>h3o</code> uses an iterative implementation (given that TCO, tail-call
+  optimization, is not guaranteed in Rust, it's usually safer to avoid recursion
+  when possible).
+</p>
+<p>
+  Another reason, that seems more plausible to me, is that <code>H3</code> uses
+  a homemade hash table that resolves collision using open addressing in
+  conjunction with linear probing.
+  <br/>
+  The issue with this strategy is that the performance will go down the drain as
+  soon as the load factor becomes too high, which is exactly what is happening
+  here considering <code>H3</code> uses the output array as a hash table and
+  this array is sized to contain exactly the number of output cell: as the
+  algorithm progress, the load factor increase until it reaches 100%.
+  <br/>
+  While this isn't noticeable on smaller disks, as the disk becomes larger (and
+  thus the number of indexes increases), the impact of the linear probing
+  becomes prohibitive.
+</p>
+
+<h4>h3SetToLinkedGeo</h4>
+<p>
+  <img src="/static/images/h3o/h3SetToLinkedGeo.png" class="centered" title="h3SetToLinkedGeo benchmark" alt="h3SetToLinkedGeo benchmark">
+</p>
+<p>
+  In this test, the speed difference between <code>H3</code> and
+  <code>h3o</code> is relatively small, until you reach a certain amount of
+  indexes in the input set where the <code>H3</code> runtime skyrocket.
+</p>
+<p>
+  It's the same issue that they have in <code>gridDiskDistancesSafe</code>: the
+  homemade hash table buckles down under the load.
+  <br/>
+  The reason why is a bit different though is because the hash table used to
+  implement the vertex graph in <code>H3</code> uses separate chaining to
+  resolve the collision. That being said, the table is never resized and if the
+  number of buckets initially selected becomes too small (and/or the hash
+  function doesn't have a good distribution), then some chains will become quite
+  large and you quickly end up with <code>O(n)</code> operations.
+</p>
+<p>
+  <code>h3o</code> uses the same approach as <code>H3</code> to detect the
+  outlines of the shapes (based on a vertex graph) but uses a different
+  algorithm to identify outer and inner rings and grouping into polygons.
+  <br/>
+  Seems like the <code>h3o</code> approach performs better for nested shapes
+  (e.g. concentric rings), maybe because it uses fewer point-in-polygon checks?
+</p>
+<table>
+  <thead>
+    <tr>
+      <th>Test case</th>
+      <th><code>H3</code></th>
+      <th><code>h3o</code></th>
+      <th>Speedup</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>0 rings</td><td>1888.4±11.33ns</td> <td>1421.9±14.58ns</td> <td>1.33</td></tr>
+    <tr><td>1 rings</td><td>  34.3±0.13µs</td>  <td>  19.4±0.17µs</td>  <td>1.77</td></tr>
+    <tr><td>2 rings</td><td> 115.1±0.61µs</td>  <td>  63.9±0.54µs</td>  <td>1.80</td></tr>
+    <tr><td>3 rings</td><td> 293.2±1.59µs</td>  <td> 144.4±2.33µs</td>  <td>2.03</td></tr>
+    <tr><td>4 rings</td><td> 558.6±17.99µs</td> <td> 265.6±3.08µs</td>  <td>2.10</td></tr>
+    <tr><td>5 rings</td><td> 968.6±5.12µs</td>  <td> 432.0±8.02µs</td>  <td>2.24</td></tr>
+  </tbody>
+</table>
+
+<h4>isPentagon</h4>
+<p>
+  <img src="/static/images/h3o/isPentagon.png" class="centered" title="isPentagon benchmark" alt="isPentagon benchmark">
+</p>
+<table>
+  <thead>
+    <tr>
+      <th>Resolution</th>
+      <th><code>H3</code></th>
+      <th><code>h3o</code></th>
+      <th>Speedup</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>0</td> <td>2.2±0.05ns</td><td>1.1±0.01ns</td><td>2.00</td></tr>
+    <tr><td>1</td> <td>2.2±0.02ns</td><td>1.1±0.01ns</td><td>1.99</td></tr>
+    <tr><td>2</td> <td>2.2±0.02ns</td><td>1.1±0.01ns</td><td>2.01</td></tr>
+    <tr><td>3</td> <td>3.9±0.03ns</td><td>1.1±0.03ns</td><td>3.48</td></tr>
+    <tr><td>4</td> <td>4.1±0.03ns</td><td>1.1±0.02ns</td><td>3.70</td></tr>
+    <tr><td>5</td> <td>4.4±0.04ns</td><td>1.1±0.01ns</td><td>3.97</td></tr>
+    <tr><td>6</td> <td>4.7±0.04ns</td><td>1.1±0.01ns</td><td>4.26</td></tr>
+    <tr><td>7</td> <td>5.0±0.04ns</td><td>1.1±0.01ns</td><td>4.54</td></tr>
+    <tr><td>8</td> <td>5.3±0.07ns</td><td>1.1±0.01ns</td><td>4.83</td></tr>
+    <tr><td>9</td> <td>5.7±0.11ns</td><td>1.1±0.01ns</td><td>5.16</td></tr>
+    <tr><td>10</td><td>5.9±0.07ns</td><td>1.1±0.01ns</td><td>5.38</td></tr>
+    <tr><td>11</td><td>6.3±0.13ns</td><td>1.1±0.02ns</td><td>5.68</td></tr>
+    <tr><td>12</td><td>6.6±0.33ns</td><td>1.1±0.02ns</td><td>5.92</td></tr>
+    <tr><td>13</td><td>6.9±0.15ns</td><td>1.1±0.01ns</td><td>6.28</td></tr>
+    <tr><td>14</td><td>7.2±0.04ns</td><td>1.1±0.01ns</td><td>6.50</td></tr>
+    <tr><td>15</td><td>7.5±0.04ns</td><td>1.1±0.01ns</td><td>6.79</td></tr>
+  </tbody>
+</table>
+<p>
+  <code>H3</code> uses a loop (<code>O(resolution)</code>) whereas
+  <code>h3o</code> relies on a 128-bit bitmap to provide a <code>O(1)</code>
+  test.
+</p>
+
+<h4>isValidCell</h4>
+<p>
+  <img src="/static/images/h3o/isValidCell.png" class="centered" title="isValidCell benchmark" alt="isValidCell benchmark">
+</p>
+<p>
+  Like what has been done for <code>isPentagon</code>, every loop in the
+  <code>H3</code> implementation has been converted into constant-time
+  operations thanks to clever bit-twiddling tricks.
+  <br/>
+  The curious reader can look at the implementation, lengthily documented, in
+  <a href="https://github.com/HydroniumLabs/h3o/blob/master/src/index/cell.rs">src/index/cell.rs</a>
+  (look for <code>TryFrom&lt;u64&gt;</code> and <code>has_unused_direction</code>).
+</p>
+<p>
+  The same pattern can be observed on <code>isValidDirectedEdge</code>, for the
+  same reasons.
+<p>
+
+<h4>latLngToCell</h4>
+<p>
+  <img src="/static/images/h3o/latLngToCell.png" class="centered" title="latLngToCell benchmark" alt="latLngToCell benchmark">
+</p>
+<p>
+  On hexagons, <code>h3o</code> has a nice performance advantage (20 to 60%),
+  maybe because it has an <code>O(1)</code> cell rotation for hexagons
+  (<code>H3</code> has an <code>O(rotation count)</code> one).
+</p>
+<p>
+  On the other hand, we're consistently slower (5 to 10%) than <code>H3</code>
+  on pentagons, which should be investigated at some point.
+</p>
+
+<h4>maxPolygonToCellsSize</h4>
+<p>
+  <ul>
+    <li><code>H3</code>: 4.8±0.08µs</li>
+    <li><code>h3o</code>: 35.4±0.18ns</li>
+  </ul>
+  Thus, a x136 speedup!
+  <br />
+  But this is misleading.
+</p>
+<p>
+  What happens here is that <code>h3o</code> works on special geometry types that (amongst other things):
+  <ul>
+    <li>check that geometry is correct (e.g. no infinite coordinates)</li>
+    <li>compute the bounding box</li>
+  </ul>
+  Because of that, some computation costs are pre-paid when you're calling
+  geometrical functions of those shapes (which is pretty cool if you reuse a
+  shape several times since you'll pay those costs only once).
+</p>
+<p>
+  And that's what we see here: in <code>H3</code>
+  <code>maxPolygonToCellsSize</code> computes the bounding box <b>AND</b>
+  estimates the number of indexes, whereas in <code>h3o</code> we only do the
+  estimation.
+</p>
+<p>
+  Because of this API, in <code>H3</code> you'll usually end up computing the
+  bounding box twice: once to estimate the size of the output set and again when
+  computing the indexes set.
+</p>
+
+<h4>polygonToCells</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Resolution</th>
+      <th><code>H3</code></th>
+      <th><code>h3o</code></th>
+      <th>Speedup</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>0 </td><td>  1.2±0.02ms</td><td>163.4±1.52µs </td><td> 7.07</td></tr>
+    <tr><td>1 </td><td>  2.0±0.03ms</td><td>202.2±2.34µs </td><td>10.02</td></tr>
+    <tr><td>2 </td><td>  1.2±0.01ms</td><td>215.7±0.92µs </td><td> 5.59</td></tr>
+    <tr><td>3 </td><td>  2.1±0.03ms</td><td>227.8±2.06µs </td><td> 9.02</td></tr>
+    <tr><td>4 </td><td>  1.3±0.01ms</td><td>244.2±3.68µs </td><td> 5.25</td></tr>
+    <tr><td>5 </td><td>  2.2±0.02ms</td><td>257.3±2.62µs </td><td> 8.37</td></tr>
+    <tr><td>6 </td><td>  1.4±0.01ms</td><td>279.3±3.38µs </td><td> 5.11</td></tr>
+    <tr><td>7 </td><td>  2.5±0.02ms</td><td>371.9±10.09µs</td><td> 6.69</td></tr>
+    <tr><td>8 </td><td>  2.4±0.02ms</td><td>789.2±21.81µs</td><td> 3.10</td></tr>
+    <tr><td>9 </td><td>  7.3±0.02ms</td><td>  3.3±0.06ms </td><td> 2.19</td></tr>
+    <tr><td>10</td><td> 25.6±0.15ms</td><td> 19.5±0.33ms </td><td> 1.31</td></tr>
+    <tr><td>11</td><td>146.3±0.63ms</td><td>127.1±1.34ms </td><td> 1.15</td></tr>
+    <tr><td>12</td><td>938.9±3.41ms</td><td>868.2±9.16ms </td><td> 1.08</td></tr>
+  </tbody>
+</table>
+<p>
+  Seems like the more indexes there are in the output, the smaller the gap
+  between <code>H3</code> and <code>h3o</code>.
+</p>
+<p>
+  One thing to notice though is that <code>H3</code> seems to have a noticeable
+  overhead for class Ⅲ resolutions.
+<br/>
+  Doesn't seems to be the case for <code>h3o</code>, and I'm not sure why
+  (<code>gridDisk</code> being in the inner loop, the difference probably stems
+  from here).
+</p>
+
+<h4>stringToH3</h4>
+<table>
+  <thead>
+    <tr>
+      <th>Index</th>
+      <th><code>H3</code></th>
+      <th><code>h3o</code></th>
+      <th>Speedup</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Cell index</td>  <td>69.5±0.99ns</td><td>14.8±0.13ns</td><td>4.68</td></tr>
+    <tr><td>Edge index</td>  <td>71.1±0.33ns</td><td>19.4±0.15ns</td><td>3.67</td></tr>
+    <tr><td>Vertex index</td><td>72.8±0.47ns</td><td>20.6±0.11ns</td><td>3.54</td></tr>
+  </tbody>
+</table>
+<p>
+  This one is interesting!
+</p>
+<p>
+  The <code>H3</code> implementation is nothing more than a sscanf, with no
+  extra validity check whatsoever (i.e it just checks that the string is a valid
+  hex representation of an unsigned 64-bit number).
+  <br/>
+  In <code>h3o</code> we call <code>isValidXXX</code> on the parsed string, to
+  ensure that the resulting number is indeed a valid index. And even with that,
+  it's still faster: nice.
+</p>
+<p>
+  It's probably because parsing an integer from a string is faster in Rust than
+  using <code>sscanf</code> in C. To be honest, this is not surprising given
+  that <code>scanf</code> functions family is kinda generic as it needs to parse
+  a lot of different things. <code>H3</code> could probably be faster here by
+  using a function from the <code>strtoul</code> family (since they are more
+  specialized, they ought to be faster).
+</p>
+
+<h2>h3-on-h3o (a.k.a h3oh3o): the H3-compatible C binding</h2>
+
+<p>
+  Once the Rust version is complete, it's time to export us to other languages!
+</p>
+<p>
+  The preferred path would be to have a C API as close as idiomatically possible
+  to the Rust one, and also a series of native bindings (using
+  <a href="https://cxx.rs">CXX</a> for C++,
+  <a href="https://github.com/PyO3/pyo3">PyO3</a> for Python,
+  <a href="https://github.com/danielpclark/rutie">rutie</a> for Ruby,
+  <a href="https://mozilla.github.io/uniffi-rs/">uniffi</a> for Swift and
+  Kotlin, etc.).
+</p>
+<p>
+  Another path is to write a C API that mimics the <code>H3</code> one which
+  allows easier testing of <code>h3o</code> in C project without modifying the
+  code and leverages existing bindings by replacing <code>H3</code> with
+  <code>h3o</code> with minimal changes.
+</p>
+<p>
+  While I prefer the former path, I started with the latter since it was the
+  quickest one to allow those who are interested to test h3o with a minimal
+  amount of friction.
+</p>
+<p>
+  And here we are with "H3 on h3o", a.k.a the
+  <a href="https://github.com/HydroniumLabs/h3oh3o">h3oh3o</a> C library.
+</p>
+<p>
+  An advantage of being isofunctional with <code>H3</code> in terms of API is
+  that we can leverage their test suites and benchmarks. Let's see how the
+  binding performs compared to the original one:
+</p>
+<table>
+  <thead>
+    <tr>
+      <th>Test</th>
+      <th><code>H3</code></th>
+      <th><code>h3o</code></th>
+      <th><code>Speedup</code></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>latLngToCell                         </td><td>    0.8463µs</td><td>    0.3880µs</td><td> 2.18</td></tr>
+    <tr><td>cellToLatLng                         </td><td>    0.5839µs</td><td>    0.2223µs</td><td> 2.63</td></tr>
+    <tr><td>cellToBoundary                       </td><td>    1.9786µs</td><td>    0.8314µs</td><td> 2.38</td></tr>
+    <tr><td>gridDisk10                           </td><td>    8.1998µs</td><td>    4.0217µs</td><td> 2.04</td></tr>
+    <tr><td>gridDisk20                           </td><td>   18.7210µs</td><td>   15.6767µs</td><td> 1.19</td></tr>
+    <tr><td>gridDisk30                           </td><td>   41.1222µs</td><td>   34.9652µs</td><td> 1.18</td></tr>
+    <tr><td>gridDisk40                           </td><td>   72.2542µs</td><td>   60.2216µs</td><td> 1.20</td></tr>
+    <tr><td>gridDiskPentagon10                   </td><td>   98.4980µs</td><td>   20.0700µs</td><td> 4.91</td></tr>
+    <tr><td>gridDiskPentagon20                   </td><td>  900.3940µs</td><td>   83.7700µs</td><td>10.75</td></tr>
+    <tr><td>gridDiskPentagon30                   </td><td> 3041.5400µs</td><td>  194.8000µs</td><td>15.61</td></tr>
+    <tr><td>gridDiskPentagon40                   </td><td> 7308.9000µs</td><td>  352.7000µs</td><td>20.72</td></tr>
+    <tr><td>gridPathCellsNear                    </td><td>    9.3828µs</td><td>    4.7500µs</td><td> 1.98</td></tr>
+    <tr><td>gridPathCellsFar                     </td><td>  413.6840µs</td><td>  202.5150µs</td><td> 2.04</td></tr>
+    <tr><td>directedEdgeToBoundary               </td><td>    5.0940µs</td><td>    2.4453µs</td><td> 2.08</td></tr>
+    <tr><td>cellToVertexes                       </td><td>    3.4804µs</td><td>    1.3102µs</td><td> 2.66</td></tr>
+    <tr><td>cellToVertexesPent                   </td><td>    0.0940µs</td><td>    0.0218µs</td><td> 4.31</td></tr>
+    <tr><td>cellToVertexesRing                   </td><td>   26.0935µs</td><td>   19.3975µs</td><td> 1.35</td></tr>
+    <tr><td>cellToVertexesRingPent               </td><td>   22.3335µs</td><td>   16.7243µs</td><td> 1.34</td></tr>
+    <tr><td>pentagonChildren_2_8                 </td><td> 1230.5830µs</td><td>  306.0520µs</td><td> 4.02</td></tr>
+    <tr><td>pentagonChildren_8_14                </td><td> 1639.8300µs</td><td>  305.7790µs</td><td> 5.36</td></tr>
+    <tr><td>pentagonChildren_8_14_null_2         </td><td>  911.4570µs</td><td>  290.7800µs</td><td> 3.13</td></tr>
+    <tr><td>pentagonChildren_8_14_null_10        </td><td> 1524.6970µs</td><td>  320.1670µs</td><td> 4.76</td></tr>
+    <tr><td>pentagonChildren_8_14_null_100       </td><td> 1629.4420µs</td><td>  311.7200µs</td><td> 5.23</td></tr>
+    <tr><td>cellsToLinkedMultiPolygonRing2       </td><td>   35.9619µs</td><td>   21.0267µs</td><td> 1.71</td></tr>
+    <tr><td>cellsToLinkedMultiPolygonDonut       </td><td>   11.4595µs</td><td>    8.1216µs</td><td> 1.41</td></tr>
+    <tr><td>cellsToLinkedMultiPolygonNestedDonuts</td><td>   45.9831µs</td><td>   34.7755µs</td><td> 1.32</td></tr>
+    <tr><td>polygonToCellsSF                     </td><td>  838.2980µs</td><td>  534.1300µs</td><td> 1.57</td></tr>
+    <tr><td>polygonToCellsAlameda                </td><td> 1183.9940µs</td><td>  656.2240µs</td><td> 1.80</td></tr>
+    <tr><td>polygonToCellsSouthernExpansion      </td><td>36224.0000µs</td><td>28038.4000µs</td><td> 1.29</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Great! Seems like the benefits of <code>h3o</code> weren't lost in the binding
+  layer: we're still noticeably faster than <code>H3</code>.
+</p>
+
+<h3>On compatibility</h3>
+
+<p>
+  While <code>h3oh3o</code> covers the whole API and strives to be isofunctional
+  to <code>H3</code>, that's not always true when you look closely.
+</p>
+<p>
+  On the happy path, no worries: the only divergences are from things
+  unspecified to begin with (e.g. the order of indexes returned by
+  <code>compactCells</code>).
+  <br/>
+  But on the error path, it's on a best-effort basis: <code>h3oh3o</code> may
+  detect more errors, returns a different error code, or simply return a
+  sensible default value instead of an error.
+  <br/>
+  This is partly due to implementation details and partly due to conscious
+  choice.
+</p>
+<p>
+  Given that error codes were added in <code>H3</code> v4, which is relatively
+  young, there is probably not a lot of code relying on precise error codes, but
+  at least now you know.
+</p>
+
+<h3>Example with h3-py</h3>
+
+<p>
+  How difficult is it to port an <code>H3</code> binding to <code>h3oh3o</code>?
+  <br/>
+  Let's see with <a href="https://github.com/uber/h3-py">h3-py</a>!
+</p>
+<p>
+  A single patch is enough to get a working binding: simply replace the
+  <code>h3</code> submodule with the <code>h3oh3o</code> one, update the header
+  location and the names of a few constants, and voilà!
+</p>
+    <figure class="code">
+      
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+</pre></td><td class="rouge-code"><pre><span class="gd">--- a/.gitmodules
+</span><span class="gi">+++ b/.gitmodules
+</span><span class="p">@@ -1,3 +1,3 @@</span>
+<span class="gd">-[submodule "src/h3lib"]
+-	path = src/h3lib
+-	url = https://github.com/uber/h3
+</span><span class="gi">+[submodule "src/h3olib"]
++	path = src/h3olib
++	url = git@github.com:HydroniumLabs/h3oh3o.git
+</span><span class="gh">diff --git a/CMakeLists.txt b/CMakeLists.txt
+</span><span class="gd">--- a/CMakeLists.txt
+</span><span class="gi">+++ b/CMakeLists.txt
+</span><span class="p">@@ -26,7 +26,7 @@</span> turn_off(ENABLE_LINTING)
+
+ # Build the core library as static
+ set(BUILD_SHARED_LIBS OFF)
+<span class="gd">-add_subdirectory(src/h3lib)
+</span><span class="gi">+add_subdirectory(src/h3olib)
+</span>
+ # Build the rest (other than the core library dependency) as shared
+ set(BUILD_SHARED_LIBS ON)
+<span class="p">@@ -35,6 +35,6 @@</span> add_subdirectory(src/h3)
+ # Include built h3api.h for Cython API
+ install(
+     FILES
+<span class="gd">-        "${CMAKE_CURRENT_BINARY_DIR}/src/h3lib/src/h3lib/include/h3api.h"
+</span><span class="gi">+        "${CMAKE_CURRENT_BINARY_DIR}/src/h3olib/gen/h3api.h"
+</span>     DESTINATION
+         src/h3/_cy)
+<span class="gh">diff --git a/src/h3/_cy/CMakeLists.txt b/src/h3/_cy/CMakeLists.txt
+</span><span class="gd">--- a/src/h3/_cy/CMakeLists.txt
+</span><span class="gi">+++ b/src/h3/_cy/CMakeLists.txt
+</span><span class="p">@@ -11,7 +11,7 @@</span> macro(add_cython_file filename)
+     add_library(${filename} MODULE ${filename} ${LIB_SOURCE_FILES} ${CONFIGURED_API_HEADER})
+     python_extension_module(${filename})
+     set_property(TARGET ${filename} PROPERTY C_STANDARD 99)
+<span class="gd">-    target_link_libraries(${filename} h3)
+</span><span class="gi">+    target_link_libraries(${filename} h3oh3o::h3oh3o)
+</span>     install(TARGETS ${filename} LIBRARY DESTINATION src/h3/_cy)
+ endmacro()
+
+diff --git a/src/h3/_cy/h3lib.pxd b/src/h3/_cy/h3lib.pxd
+<span class="gd">--- a/src/h3/_cy/h3lib.pxd
+</span><span class="gi">+++ b/src/h3/_cy/h3lib.pxd
+</span><span class="p">@@ -4,9 +4,9 @@</span> from libc.stdint cimport uint32_t, uint64_t, int64_t
+ ctypedef basestring H3str
+
+ cdef extern from 'h3api.h':
+<span class="gd">-    cdef int H3_VERSION_MAJOR
+-    cdef int H3_VERSION_MINOR
+-    cdef int H3_VERSION_PATCH
+</span><span class="gi">+    cdef int H3O_VERSION_MAJOR
++    cdef int H3O_VERSION_MINOR
++    cdef int H3O_VERSION_PATCH
+</span>
+     ctypedef uint64_t H3int 'H3Index'
+
+diff --git a/src/h3/_cy/util.pyx b/src/h3/_cy/util.pyx
+<span class="gd">--- a/src/h3/_cy/util.pyx
+</span><span class="gi">+++ b/src/h3/_cy/util.pyx
+</span><span class="p">@@ -28,9 +28,9 @@</span> cdef (double, double) coord2deg(h3lib.LatLng c) nogil:
+
+ cpdef basestring c_version():
+     v = (
+<span class="gd">-        h3lib.H3_VERSION_MAJOR,
+-        h3lib.H3_VERSION_MINOR,
+-        h3lib.H3_VERSION_PATCH,
+</span><span class="gi">+        h3lib.H3O_VERSION_MAJOR,
++        h3lib.H3O_VERSION_MINOR,
++        h3lib.H3O_VERSION_PATCH,
+</span>     )
+
+     return '{}.{}.{}'.format(*v)
+<span class="gh">diff --git a/src/h3lib b/src/h3lib
+</span><span class="p">deleted file mode 160000
+</span><span class="gd">--- a/src/h3lib
+</span><span class="gi">+++ /dev/null
+</span><span class="p">@@ -1 +0,0 @@</span>
+<span class="gd">-Subproject commit 46a581c905b2747c861aa1683125276501f68a3b
+</span><span class="gh">diff --git a/src/h3olib b/src/h3olib
+</span><span class="p">new file mode 160000
+</span><span class="gd">--- /dev/null
+</span><span class="gi">+++ b/src/h3olib
+</span><span class="p">@@ -0,0 +1 @@</span>
+<span class="gi">+Subproject commit 66e352341384b6a67c8c47487febf123406e1f14
+</span></pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+
+<p>
+  Add another little patch to adapt the test suite to <code>h3oh3o</code> and
+  you get a working binding with a green test suite.
+</p>
+    <figure class="code">
+      
+      <div class="highlight">
+        <table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+</pre></td><td class="rouge-code"><pre><span class="gd">--- a/tests/test_cells_and_edges.py
+</span><span class="gi">+++ b/tests/test_cells_and_edges.py
+</span><span class="p">@@ -8,6 +8,8 @@</span> from h3 import (
+     H3ResMismatchError,
+     H3CellInvalidError,
+     H3NotNeighborsError,
+<span class="gi">+    H3DirEdgeInvalidError,
++    H3PentagonError,
+</span> )
+
+
+<span class="p">@@ -159,8 +161,9 @@</span> def test_parent_err():
+ def test_children():
+     h = '8928308280fffff'
+
+-    with pytest.raises(H3ResDomainError):
+<span class="gd">-        h3.cell_to_children(h, 8)
+</span><span class="gi">+    # H3O returns an empty set of children when resolution is coarser.
++    out = h3.cell_to_children(h, 8)
++    assert out == set()
+</span>
+     # same resolution is set of just cell itself
+     out = h3.cell_to_children(h, 9)
+<span class="p">@@ -442,10 +445,13 @@</span> def test_edges():
+     e_bad = '14928308280ffff1'
+     assert not h3.is_valid_directed_edge(e_bad)
+
+-    # note: won't raise an error on bad input
+<span class="gd">-    h3.get_directed_edge_origin(e_bad)
+-    h3.get_directed_edge_destination(e_bad)
+-    h3.directed_edge_to_cells(e_bad)
+</span><span class="gi">+    # Those are correctly caught by H3O
++    with pytest.raises(H3DirEdgeInvalidError):
++        h3.get_directed_edge_origin(e_bad)
++    with pytest.raises(H3DirEdgeInvalidError):
++        h3.get_directed_edge_destination(e_bad)
++    with pytest.raises(H3DirEdgeInvalidError):
++        h3.directed_edge_to_cells(e_bad)
+</span>
+
+ def test_line():
+<span class="p">@@ -463,18 +469,19 @@</span> def test_line():
+     assert out == expected
+
+
+<span class="gd">-def test_versions():
+-    from packaging.version import Version
+-
+-    v = h3.versions()
+-
+-    assert v['python'] == h3.__version__
+-
+-    v_c = Version(v['c'])
+-    v_p = Version(v['python'])
+-
+-    # of X.Y.Z, X and Y must match
+-    assert v_c.release[:2] == v_p.release[:2]
+</span><span class="gi">+# No longer true with H3O since numbering goes back to 0.1.0
++#def test_versions():
++#    from packaging.version import Version
++#
++#    v = h3.versions()
++#
++#    assert v['python'] == h3.__version__
++#
++#    v_c = Version(v['c'])
++#    v_p = Version(v['python'])
++#
++#    # of X.Y.Z, X and Y must match
++#    assert v_c.release[:2] == v_p.release[:2]
+</span>
+
+ def test_str_int_convert():
+<span class="p">@@ -615,7 +622,7 @@</span> def test_from_local_ij_error():
+
+     baddies = [(1, -1), (-1, 1), (-1, -1)]
+     for i, j in baddies:
+<span class="gd">-        with pytest.raises(H3FailedError):
+</span><span class="gi">+        with pytest.raises((H3PentagonError, H3FailedError)):
+</span>             h3.local_ij_to_cell(h, i, j)
+
+     # inverting output should give good data
+<span class="gh">diff --git a/tests/test_h3.py b/tests/test_h3.py
+</span><span class="gd">--- a/tests/test_h3.py
+</span><span class="gi">+++ b/tests/test_h3.py
+</span><span class="p">@@ -471,9 +471,8 @@</span> def test_compact_cells_and_uncompact_cells_nothing():
+
+ def test_uncompact_cells_error():
+     hexagons = [h3.latlng_to_cell(37, -122, 10)]
+<span class="gd">-
+-    with pytest.raises(Exception):
+-        h3.uncompact_cells(hexagons, 5)
+</span><span class="gi">+    # H3O return an empty set when unpacking to a coarser resolution.
++    h3.uncompact_cells(hexagons, 5) == set()
+</span>
+
+ def test_compact_cells_malformed_input():
+</pre></td></tr></tbody></table>
+      </div>
+    </figure>
+
+<p>You can now use <code>h3o</code> in Python.</p>
+
+<h2>h3o-cli: the H3 Swiss Army knife CLI</h2>
+<p>
+  <a href="https://github.com/HydroniumLabs/h3o-cli">h3o-cli</a> brings the
+  power of <code>h3o</code> to your fingertips. Its main purpose is to replace
+  the one-shot scripts you would write to quickly test or verify something
+  (e.g. convert a shape to indexes, describe a cell index, print resolution
+  statistics, …)
+</p>
+<p>
+  Each subcommand has up to four output formats:
+  <ul>
+    <li>text: for human consumption or commands pipelines</li>
+    <li>JSON: for program consumption and scripting (easier parsing)</li>
+    <li>
+      GeoJSON: for visualization (e.g. using
+      <a href="https://geojson.io">geojson.io</a>)
+    </li>
+    <li>KML: for vizualization too</li>
+  </ul>
+</p>
+<p>
+  Note that the CLI is built with composition in mind, as such the output of
+  some subcommands can be piped into other subcommands, allowing to build
+  complex processing pipelines easily.
+  <br/>
+  For instance, the following command computes the coverage of Paris, from a
+  GeoJSON file, and compacts then compresses the resulting set into an output
+  file.
+</p>
+
+    <figure class="code">
+      
+      <div class="highlight">
+        <pre>h3o-cli geomToCells -r 11 -f geojson &lt; paris.geojson \
+    | h3o-cli compact \
+    | h3o-cli compress &gt; cells.thc
+</pre>
+      </div>
+    </figure>
+
+
+<p>
+  The CLI doesn't cover the whole API yet, it's currently focused on the subset
+  I found myself using the most but I plan to enrich it as time pass.
+</p>
+
+<h2>thc: a compression scheme tailored for H3</h2>
+
+<p>
+  <a href="https://github.com/HydroniumLabs/thc">thc (The H3 Compressor)</a>
+  is a library that provides compression algorithms tailored for H3.
+</p>
+<p>
+  The first (and only for now) algorithm provided is CHT (Compressed H3 Tree)
+  which is optimized for compression size. The main use cases would be on-disk
+  storage or transfers across the network.
+</p>
+<p>
+  The <code>H3</code> library already provides a compaction algorithm, but it
+  has some limitations:
+  <ul>
+    <li>only works on homogeneous (in terms of resolutions) sets</li>
+    <li>
+      doesn't compress the index (an index is still 64-bit), only reduces their
+      number
+    </li>
+    <li>
+      is almost useless on input sets with (almost) no clusters (e.g. paths)
+    </li>
+  </ul>
+</p>
+<p>
+  CHT addresses those weaknesses:
+  <ul>
+    <li>can take heterogeneous sets as input</li>
+    <li>
+      indexes are compressed, at best it goes from 64 bits/index to 2.3
+      bits/index
+    </li>
+    <li>
+      cluster-less input sets can also be compressed (albeit less efficiently
+      since there is less information redundancy, but still usually goes down
+      from 64-bit/index to 6.25 bits/index).
+    </li>
+  </ul>
+</p>
+<p>
+  CHT accomplishes this by viewing the H3 system as a gigantic tree, where
+  resolutions are levels and cell indexes encode paths into this tree. A set of
+  cell indexes is equivalent to a set of paths, that once grouped together forms
+  a subtree. This subtree is then encoded in a compact way.
+  <br/>
+  The curious reader can inspect the source code at
+  <a href="https://github.com/HydroniumLabs/thc/blob/master/src/cht.rs">cht.rs</a>,
+  where the implementation details are documented, with step-by-step examples.
+</p>
+
+<h3>Benchmark</h3>
+
+<h4>Dense set: Paris</h4>
+<p>
+  <img src="/static/images/h3o/paris.jpg" class="centered" title="The shape of Paris" alt="The shape of Paris">
+</p>
+<p>
+  At resolution 11, Paris contains 54,812 cell indexes.  At 64-bit per index,
+  this represents ~438KB (438,496 bytes).
+</p>
+<p>
+  If we compress these indexes using CHT, we get a payload ~27x smaller than the
+  original size (16,330 bytes, i.e. ~16KB) meaning that each index is encoded on
+  ~2.38 bits.
+</p>
+<p>
+  If we compact these indexes, we get a similar result: a payload ~27x smaller
+  (16,192 bytes, a tad bit smaller than THC but still ~16KB). But the indexes
+  are still encoded on 64 bits, we've greatly reduced their number (from 54,812
+  to 2,024) instead of compressing them.
+</p>
+<p>
+  Remember that CHT also works on heterogeneous index sets, like the one
+  produced by the compaction algorithm: what if we try to compress the compacted
+  set?
+  <br/>
+  In that case, we get a payload 17x smaller than the compacted one, with the
+  2,024 indexes being represented by 933 bytes (i.e. ~3.69 bits/index). Even
+  though the compression is less efficient (3.69 vs 2.38), since we have a lot
+  fewer indexes the end result is a lot better than compressing the uncompacted
+  set.
+</p>
+<p>
+  In the end, we went from a ~438KB payload to one under 1KB (~x469 smaller),
+  effectively encoding 54,812 indexes on 933 bytes (equivalent to ~0.14
+  bits/index).
+</p>
+<p>
+  Results are even more impressive applied at the country level (only
+  considering mainland France here): 267,532,208 indexes occupying ~2.14GB
+  (2,140,257,664 bytes) are reduced to a payload of ~103KB (103,348 bytes) by
+  <code>compact-then-compress</code>, which is  20k times smaller  (equivalent
+  to ~0.003 bits/index) than the starting point.
+</p>
+
+<h4>Sparse set: bikeways</h4>
+<p>
+  Ok, that was the easy case: what about index sets representing things like
+  paths? How do we behave with this class of input?
+  <br/>
+  Let's find out by using a (non-exhaustive) map of France's bikeways as input!
+</p>
+<p>
+  <img src="/static/images/h3o/bikeways.jpg" class="centered" title="Bikeways in France" alt="Bikeways in France">
+</p>
+<p>
+  At resolution 11 we have 690,451 indexes which represents a 5.52MB payload
+  (5,523,608 bytes).
+</p>
+<p>
+  If we compact this index set, we don't gain much: we get a set of 689,971 (a
+  difference of 480 indexes only), which is not noticeably smaller (5,519,768
+  bytes, which is still 5.52MB).
+</p>
+<p>
+  On the other hand, if the compress this index set we're down to ~539KB
+  (539,405 bytes), which is 10x smaller (each index is encoded on ~6.25 bits).
+</p>
+<p>
+  While not as impressive as the previous test, which is not surprising as we're
+  kinda comparing best case vs worst case here, it's still an appreciable gain
+  (especially compared to the uselessness of the compaction on that kind of
+  index set).
+</p>
+
+<h2>What's next</h2>
+<p>
+  Even though the h3o API is expected to be close to its final state, I won't
+  rush for the 1.0 just yet. I first want to build more projects on top of it
+  to detect any rough edges that would need some adjustments.
+</p>
+<p>
+  Short term, I would need to catch up with the soon-to-be-released
+  <code>H3</code> 4.1.
+</p>
+<p>
+  Medium-term, I plan to continue my work on a compact and efficient in-memory
+  data structure for indexes set of homogeneous resolution. Already have a very
+  promising first draft locally, but it still needs to be refined to reach a
+  releasable state.
+  <br/>
+  Also fix the functions that are still slower than <code>H3</code>.
+</p>
+<p>
+  Long term, will work on more bindings: a better C one and also dedicated
+  bindings for other languages (as mentioned above).
+</p>
+
+
+  <hr class="weak-hr" />
+
+  <footer>
+    <p>
+      <!-- date -->
+      Publié le
+      <time datetime="2023-01-09T00:00:00Z"
+            itemprop="datePublished">
+        2023-01-09
+      </time>
+      
+        —
+        <!-- tags -->
+        Catégories : <a href="/blog/tags/#développement" rel="tag">Développement</a> <a href="/blog/tags/#rust" rel="tag">Rust</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+    <hr class="strong-hr" />
+
+    <footer>
+      <small>
+        Copyright © 2010-2023 — Sylvain Laperche
+        <br />
+        Le contenu de ce site est sous licence
+        <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
+        <br />
+        Produit avec <a href="https://nanoc.app/">nanoc</a>.
+      </small>
+    </footer>
+  </body>
+</html>

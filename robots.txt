@@ -1,4 +1,4 @@
 User-agent: *
 Disallow:
 
-Sitemap: https://grim7reaper.rolinh.ch/sitemap.xml
+Sitemap: https://grim7reaper.github.io/sitemap.xml

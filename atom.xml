@@ -1,20 +1,1238 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://grim7reaper.rolinh.ch/">
-  <id>https://grim7reaper.rolinh.ch/</id>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://grim7reaper.github.io/">
+  <id>https://grim7reaper.github.io/</id>
   <title>grim7reaper</title>
-  <updated>2019-12-06T00:00:00Z</updated>
-  <link rel="alternate" href="https://grim7reaper.rolinh.ch/" type="text/html"/>
-  <link rel="self" href="https://grim7reaper.rolinh.ch/atom.xml" type="application/atom+xml"/>
+  <updated>2023-01-09T00:00:00Z</updated>
+  <link rel="alternate" href="https://grim7reaper.github.io/" type="text/html"/>
+  <link rel="self" href="https://grim7reaper.github.io/atom.xml" type="application/atom+xml"/>
   <author>
     <name>Sylvain Laperche</name>
     <uri>/about</uri>
   </author>
   <entry>
-    <id>tag:grim7reaper.rolinh.ch,2019-12-06:/blog/2019/12/06/python-optimisation-et-couverture-de-code/</id>
+    <id>tag:grim7reaper.github.io,2023-01-09:/blog/2023/01/09/the-hydronium-project/</id>
+    <title type="html">Harder, Better, Faster, Stronger version of Uber H3 in Rust: The Hydronium Project</title>
+    <published>2023-01-09T00:00:00Z</published>
+    <updated>2023-01-09T00:00:00Z</updated>
+    <link rel="alternate" href="https://grim7reaper.github.io/blog/2023/01/09/the-hydronium-project/" type="text/html"/>
+    <content type="html">&lt;p&gt;
+  Since this article will probably have more reach than my usual rambling, It'll
+  be written in English (but let's not make a habit of it).
+&lt;/p&gt;
+&lt;p&gt;
+  By the way, in case you missed it, the title is a reference to this
+  &lt;a href="https://genius.com/Daft-punk-harder-better-faster-stronger-lyrics"&gt;song&lt;/a&gt;.
+&lt;/p&gt;
+
+&lt;h2&gt;h3o: the oxidized H3&lt;/h2&gt;
+
+&lt;p&gt;
+  &lt;a href="https://github.com/HydroniumLabs/h3o"&gt;h3o&lt;/a&gt; is not a binding (like
+  &lt;a href="https://github.com/nmandery/h3ron"&gt;h3ron&lt;/a&gt;) but a complete rewrite
+  of &lt;a href="https://github.com/uber/h3"&gt;H3&lt;/a&gt;.
+&lt;/p&gt;
+&lt;p&gt;
+  The goals of this rewrite in Rust were:
+  &lt;ul&gt;
+    &lt;li&gt;
+      an easier integration in Rust projects, especially when targeting WASM
+    &lt;/li&gt;
+    &lt;li&gt;
+      to provide safer API, leveraging strong typing (e.g. having distinct types for each
+      index mode)
+    &lt;/li&gt;
+    &lt;li&gt;
+      to be faster (or at least as fast) than the reference library
+    &lt;/li&gt;
+    &lt;li&gt;
+      to cover 100% of 4.0 API (current release at the time the project started)
+    &lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/p&gt;
+
+&lt;h3&gt;Testing&lt;/h3&gt;
+
+&lt;p&gt;
+  Differential testing has been used to reduce the risk of regression/divergence
+  from the reference implementation.
+&lt;/p&gt;
+&lt;p&gt;
+  Each public function of &lt;code&gt;h3o&lt;/code&gt; has been tested, exhaustively on
+  coarser resolutions when possible, against its counterpart in &lt;code&gt;H3&lt;/code&gt;
+  (through the
+  &lt;a href="https://github.com/nmandery/h3ron/tree/main/h3ron-h3-sys"&gt;h3ron-sys&lt;/a&gt;
+  binding), except for geometrical functions (it's been postponed) because the
+  conversion and robust comparison were a bit troublesome to implement.
+&lt;/p&gt;
+&lt;p&gt;
+  In addition to the differential test suite (756 tests), there are 166
+  integration tests (covering extra features no present in &lt;code&gt;H3&lt;/code&gt; such
+  as GeoJSON helpers) and 42 unit tests (for internal functions).
+&lt;/p&gt;
+&lt;p&gt;
+  Last but not least, 15 fuzz targets also have been implemented (doesn't cover
+  the whole public API yet though, but it's a start).
+&lt;/p&gt;
+
+&lt;h3&gt;Performance&lt;/h3&gt;
+
+&lt;p&gt;
+  A benchmark suite composed of 911 test cases has been developed, covering the
+  whole public API and comparing &lt;code&gt;h3o&lt;/code&gt; performance against the
+  &lt;code&gt;H3&lt;/code&gt; reference implementation (through the &lt;code&gt;h3ron-sys&lt;/code&gt;
+  crate which is expected to have no overhead).
+&lt;/p&gt;
+&lt;p&gt;
+Full results are available
+&lt;a href="/static/misc/critcmp.txt"&gt;here&lt;/a&gt;.
+You can also run the benchmarks locally:
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;cargo bench --bench h3 --all-features -- --save-baseline h3 '/h3/'
+cargo bench --bench h3 --all-features -- --save-baseline h3 '/h3$'
+
+cargo bench --bench h3 --all-features -- --save-baseline h3o '/h3o/'
+cargo bench --bench h3 --all-features -- --save-baseline h3o '/h3o$'
+
+critcmp h3 h3o -g '(.+/)(?:h3o?)(/?.*)'
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;h4&gt;Overview&lt;/h4&gt;
+
+&lt;p&gt;
+  Before diving into the results, a quick overview:
+  &lt;ul&gt;
+    &lt;li&gt;5 tests where the performance is equals&lt;/li&gt;
+    &lt;li&gt;44 tests where &lt;code&gt;H3&lt;/code&gt; still outperform &lt;code&gt;h3o&lt;/code&gt;&lt;/li&gt;
+    &lt;ul&gt;
+      &lt;li&gt;
+        34 tests where &lt;code&gt;H3&lt;/code&gt; is marginally faster (the difference is
+        10% or less)
+      &lt;/li&gt;
+      &lt;li&gt;
+        5 tests where &lt;code&gt;H3&lt;/code&gt; is faster (the difference is between 11%
+        and 20%)
+      &lt;/li&gt;
+      &lt;li&gt;
+        4 tests where &lt;code&gt;H3&lt;/code&gt; is noticeably faster (the difference is up
+        to 50%)
+      &lt;/li&gt;
+      &lt;li&gt;
+        1 test where &lt;code&gt;H3&lt;/code&gt; is twice as fast
+        (&lt;code&gt;gridDiskDistancesSafe/Hexagon/1&lt;/code&gt;)
+      &lt;/li&gt;
+    &lt;/ul&gt;
+    &lt;li&gt;862 tests where &lt;code&gt;h3o&lt;/code&gt; outperforms &lt;code&gt;H3&lt;/code&gt;&lt;/li&gt;
+    &lt;ul&gt;
+      &lt;li&gt;166 with a difference between 1% and 10%&lt;/li&gt;
+      &lt;li&gt;195 with a difference between 11% and 20%&lt;/li&gt;
+      &lt;li&gt;163 with a difference between 21% and 50%&lt;/li&gt;
+      &lt;li&gt;48 where &lt;code&gt;h3o&lt;/code&gt; is up to 2x faster&lt;/li&gt;
+      &lt;li&gt;93 where &lt;code&gt;h3o&lt;/code&gt; is up to 3x faster&lt;/li&gt;
+      &lt;li&gt;84 where &lt;code&gt;h3o&lt;/code&gt; is up to 4x faster&lt;/li&gt;
+      &lt;li&gt;43 where &lt;code&gt;h3o&lt;/code&gt; is up to 5x faster&lt;/li&gt;
+      &lt;li&gt;46 where &lt;code&gt;h3o&lt;/code&gt; is up to 10x faster&lt;/li&gt;
+      &lt;li&gt;24 where &lt;code&gt;h3o&lt;/code&gt; is up to 10x faster&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/ul&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+  Most of the tests where &lt;code&gt;h3o&lt;/code&gt; is slower are limited to coarse
+  resolutions (&amp;lt; 3 for half of them) which are usually fast anyway (still,
+  would be nice if we could be on par here as well), the only exceptions being:
+  &lt;ul&gt;
+    &lt;li&gt;
+      &lt;code&gt;cellToLatLng&lt;/code&gt; for class Ⅲ resolutions especially on
+      pentagons.
+    &lt;/li&gt;
+    &lt;li&gt;&lt;code&gt;latLngToCell&lt;/code&gt; for pentagon&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;br/&gt;
+  Will probably dive into those two cases as they shouldn't be slower.
+&lt;/p&gt;
+&lt;p&gt;
+  Let's now look closer at some interesting benchmark results, and describe the
+  optimizations behind them.
+&lt;/p&gt;
+
+&lt;h4&gt;cellToBoundary&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/cellToBoundary.png" class="centered" title="cellToBoundary benchmark" alt="cellToBoundary benchmark"&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  Not a huge win on this one (up to 40% for the finer resolutions), but we can
+  see the impact of edge-crossing handling for pentagons at resolutions of class
+  Ⅲ (class Ⅱ aren't impacted because at those resolutions edges have vertices on
+  the same icosahedron face).
+&lt;/p&gt;
+
+&lt;h4&gt;cellToChildrenSize&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/cellToChildrenSize.png" class="centered" title="cellToChildrenSize benchmark" alt="cellToChildrenSize benchmark"&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  &lt;code&gt;H3&lt;/code&gt; is using a formula to compute it on the fly (you can notice a
+  small jump at each power of two due to their &lt;code&gt;ipow&lt;/code&gt; implementation)
+  whereas &lt;code&gt;h3o&lt;/code&gt; uses a lookup table of pre-computed values.
+  &lt;br /&gt;
+  Same thing for &lt;code&gt;getNumCells&lt;/code&gt;.
+&lt;/p&gt;
+
+&lt;h4&gt;cellToLatLng&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/cellToLatLng.png" class="centered" title="cellToLatLng benchmark" alt="cellToLatLng benchmark"&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  One of the cases where &lt;code&gt;H3&lt;/code&gt; is consistently faster than
+  &lt;code&gt;h3o&lt;/code&gt;: for pentagons at resolutions of class Ⅲ.
+  &lt;br/&gt;
+  I've probably messed up something in this specific case, will have to dig into
+  it because there is no reason why we would be faster on class Ⅱ but not class
+  Ⅲ.
+&lt;/p&gt;
+
+&lt;h4&gt;cellToParent&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/cellToParent.png" class="centered" title="cellToParent benchmark" alt="cellToParent benchmark"&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  &lt;code&gt;H3&lt;/code&gt; uses a loop to "clear" (set to &lt;code&gt;0b111&lt;/code&gt;) the
+  trailing unused bits at the targeted parent resolution, resulting in an
+  &lt;code&gt;O(n)&lt;/code&gt; algorithm where &lt;code&gt;n&lt;/code&gt; is the difference between the
+  child cell resolution and the one of the requested parent.
+  &lt;br/&gt;
+  The benchmark uses a cell index at resolution 15 as input, that's why the
+  coarser the resolution gets, the slower the algorithm is.
+  &lt;br/&gt;
+  On the other hand, &lt;code&gt;h3o&lt;/code&gt; uses a constant-time approach based on bit
+  twiddling, hence the flatline.
+&lt;/p&gt;
+
+&lt;h4&gt;compactCell&lt;/h4&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Test case&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;H3&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;h3o&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;Speedup&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;NoCompaction&lt;/td&gt;      &lt;td&gt;326.5±3.07µs&lt;/td&gt;&lt;td&gt;243.9±1.13µs&lt;/td&gt;&lt;td&gt;1.34&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;PartialCompaction&lt;/td&gt; &lt;td&gt;326.0±2.56µs&lt;/td&gt;&lt;td&gt;206.6±1.14µs&lt;/td&gt;&lt;td&gt;1.58&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;FullCompaction&lt;/td&gt;    &lt;td&gt;318.4±4.66µs&lt;/td&gt;&lt;td&gt;134.0±0.78µs&lt;/td&gt;&lt;td&gt;2.38&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;
+  The &lt;code&gt;h3o&lt;/code&gt; implementation is not a port of the &lt;code&gt;H3&lt;/code&gt;
+  algorithm.
+  &lt;br/&gt;
+  &lt;code&gt;H3&lt;/code&gt; iteratively compacts the input set until it reaches a stable
+  (i.e. non-compactable) state.
+  &lt;br/&gt;
+  &lt;code&gt;h3o&lt;/code&gt; starts by sorting the input set, and then compacts chunks of
+  adjacent indexes (from coarser to finer resolution), effectively galloping
+  through the data (hence the bigger speedup on a fully compactable set) in a
+  single pass.
+&lt;/p&gt;
+
+&lt;h4&gt;gridDiskDistancesSafe&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/gridDiskDistancesSafe.png" class="centered" title="gridDiskDistancesSafe benchmark" alt="gridDiskDistancesSafe benchmark"&gt;
+&lt;/p&gt;
+&lt;p&gt;Here are the measures for hexagons (pentagons are in the same ballpark).&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Test case&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;H3&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;h3o&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;Speedup&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/0&lt;/td&gt;   &lt;td&gt;   3.6±0.08ns&lt;/td&gt; &lt;td&gt;   1.2±0.01ns&lt;/td&gt;  &lt;td&gt; 2.87&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/1&lt;/td&gt;   &lt;td&gt;  85.2±2.56ns&lt;/td&gt; &lt;td&gt; 170.7±2.66ns&lt;/td&gt;  &lt;td&gt; 0.50&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/2&lt;/td&gt;   &lt;td&gt; 448.9±6.28ns&lt;/td&gt; &lt;td&gt; 635.7±8.90ns&lt;/td&gt;  &lt;td&gt; 0.70&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/3&lt;/td&gt;   &lt;td&gt;1724.1±22.38ns&lt;/td&gt;&lt;td&gt;1504.1±6.71ns&lt;/td&gt;  &lt;td&gt; 1.15&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/4&lt;/td&gt;   &lt;td&gt;   4.6±0.05µs&lt;/td&gt; &lt;td&gt;   2.8±0.02µs&lt;/td&gt;  &lt;td&gt; 1.67&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/5&lt;/td&gt;   &lt;td&gt;  16.0±0.46µs&lt;/td&gt; &lt;td&gt;   4.5±0.03µs&lt;/td&gt;  &lt;td&gt; 3.52&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/6&lt;/td&gt;   &lt;td&gt;  21.4±0.69µs&lt;/td&gt; &lt;td&gt;   6.6±0.03µs&lt;/td&gt;  &lt;td&gt; 3.24&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/7&lt;/td&gt;   &lt;td&gt;  26.2±0.66µs&lt;/td&gt; &lt;td&gt;   9.6±0.16µs&lt;/td&gt;  &lt;td&gt; 2.72&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/8&lt;/td&gt;   &lt;td&gt;  74.8±0.79µs&lt;/td&gt; &lt;td&gt;  13.4±0.21µs&lt;/td&gt;  &lt;td&gt; 5.60&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/9&lt;/td&gt;   &lt;td&gt;  58.1±0.59µs&lt;/td&gt; &lt;td&gt;  16.1±0.16µs&lt;/td&gt;  &lt;td&gt; 3.62&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/10&lt;/td&gt;  &lt;td&gt; 150.4±1.64µs&lt;/td&gt; &lt;td&gt;  20.5±0.13µs&lt;/td&gt;  &lt;td&gt; 7.34&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/20&lt;/td&gt;  &lt;td&gt;1658.4±15.81µs&lt;/td&gt;&lt;td&gt;  90.5±0.59µs&lt;/td&gt;  &lt;td&gt;18.33&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/30&lt;/td&gt;  &lt;td&gt;   3.3±0.06ms&lt;/td&gt; &lt;td&gt; 219.7±2.03µs&lt;/td&gt;  &lt;td&gt;14.87&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/40&lt;/td&gt;  &lt;td&gt;  11.2±0.04ms&lt;/td&gt; &lt;td&gt; 480.3±79.36µs&lt;/td&gt; &lt;td&gt;23.35&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/50&lt;/td&gt;  &lt;td&gt;  28.3±0.12ms&lt;/td&gt; &lt;td&gt; 614.1±42.11µs&lt;/td&gt; &lt;td&gt;46.06&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Hexagon/100&lt;/td&gt; &lt;td&gt; 140.3±0.43ms&lt;/td&gt; &lt;td&gt;   2.6±0.11ms&lt;/td&gt;  &lt;td&gt;54.98&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;
+  This is one of the functions where &lt;code&gt;h3o&lt;/code&gt; shines the most, which is a
+  bit surprising considering the implementations are similar.
+&lt;/p&gt;
+&lt;p&gt;
+  One reason could be that the &lt;code&gt;H3&lt;/code&gt; code uses recursion, whereas
+  &lt;code&gt;h3o&lt;/code&gt; uses an iterative implementation (given that TCO, tail-call
+  optimization, is not guaranteed in Rust, it's usually safer to avoid recursion
+  when possible).
+&lt;/p&gt;
+&lt;p&gt;
+  Another reason, that seems more plausible to me, is that &lt;code&gt;H3&lt;/code&gt; uses
+  a homemade hash table that resolves collision using open addressing in
+  conjunction with linear probing.
+  &lt;br/&gt;
+  The issue with this strategy is that the performance will go down the drain as
+  soon as the load factor becomes too high, which is exactly what is happening
+  here considering &lt;code&gt;H3&lt;/code&gt; uses the output array as a hash table and
+  this array is sized to contain exactly the number of output cell: as the
+  algorithm progress, the load factor increase until it reaches 100%.
+  &lt;br/&gt;
+  While this isn't noticeable on smaller disks, as the disk becomes larger (and
+  thus the number of indexes increases), the impact of the linear probing
+  becomes prohibitive.
+&lt;/p&gt;
+
+&lt;h4&gt;h3SetToLinkedGeo&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/h3SetToLinkedGeo.png" class="centered" title="h3SetToLinkedGeo benchmark" alt="h3SetToLinkedGeo benchmark"&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  In this test, the speed difference between &lt;code&gt;H3&lt;/code&gt; and
+  &lt;code&gt;h3o&lt;/code&gt; is relatively small, until you reach a certain amount of
+  indexes in the input set where the &lt;code&gt;H3&lt;/code&gt; runtime skyrocket.
+&lt;/p&gt;
+&lt;p&gt;
+  It's the same issue that they have in &lt;code&gt;gridDiskDistancesSafe&lt;/code&gt;: the
+  homemade hash table buckles down under the load.
+  &lt;br/&gt;
+  The reason why is a bit different though is because the hash table used to
+  implement the vertex graph in &lt;code&gt;H3&lt;/code&gt; uses separate chaining to
+  resolve the collision. That being said, the table is never resized and if the
+  number of buckets initially selected becomes too small (and/or the hash
+  function doesn't have a good distribution), then some chains will become quite
+  large and you quickly end up with &lt;code&gt;O(n)&lt;/code&gt; operations.
+&lt;/p&gt;
+&lt;p&gt;
+  &lt;code&gt;h3o&lt;/code&gt; uses the same approach as &lt;code&gt;H3&lt;/code&gt; to detect the
+  outlines of the shapes (based on a vertex graph) but uses a different
+  algorithm to identify outer and inner rings and grouping into polygons.
+  &lt;br/&gt;
+  Seems like the &lt;code&gt;h3o&lt;/code&gt; approach performs better for nested shapes
+  (e.g. concentric rings), maybe because it uses fewer point-in-polygon checks?
+&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Test case&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;H3&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;h3o&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;Speedup&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;0 rings&lt;/td&gt;&lt;td&gt;1888.4±11.33ns&lt;/td&gt; &lt;td&gt;1421.9±14.58ns&lt;/td&gt; &lt;td&gt;1.33&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;1 rings&lt;/td&gt;&lt;td&gt;  34.3±0.13µs&lt;/td&gt;  &lt;td&gt;  19.4±0.17µs&lt;/td&gt;  &lt;td&gt;1.77&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;2 rings&lt;/td&gt;&lt;td&gt; 115.1±0.61µs&lt;/td&gt;  &lt;td&gt;  63.9±0.54µs&lt;/td&gt;  &lt;td&gt;1.80&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;3 rings&lt;/td&gt;&lt;td&gt; 293.2±1.59µs&lt;/td&gt;  &lt;td&gt; 144.4±2.33µs&lt;/td&gt;  &lt;td&gt;2.03&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;4 rings&lt;/td&gt;&lt;td&gt; 558.6±17.99µs&lt;/td&gt; &lt;td&gt; 265.6±3.08µs&lt;/td&gt;  &lt;td&gt;2.10&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;5 rings&lt;/td&gt;&lt;td&gt; 968.6±5.12µs&lt;/td&gt;  &lt;td&gt; 432.0±8.02µs&lt;/td&gt;  &lt;td&gt;2.24&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h4&gt;isPentagon&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/isPentagon.png" class="centered" title="isPentagon benchmark" alt="isPentagon benchmark"&gt;
+&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Resolution&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;H3&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;h3o&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;Speedup&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;0&lt;/td&gt; &lt;td&gt;2.2±0.05ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;2.00&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;1&lt;/td&gt; &lt;td&gt;2.2±0.02ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;1.99&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;2&lt;/td&gt; &lt;td&gt;2.2±0.02ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;2.01&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;3&lt;/td&gt; &lt;td&gt;3.9±0.03ns&lt;/td&gt;&lt;td&gt;1.1±0.03ns&lt;/td&gt;&lt;td&gt;3.48&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;4&lt;/td&gt; &lt;td&gt;4.1±0.03ns&lt;/td&gt;&lt;td&gt;1.1±0.02ns&lt;/td&gt;&lt;td&gt;3.70&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;5&lt;/td&gt; &lt;td&gt;4.4±0.04ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;3.97&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;6&lt;/td&gt; &lt;td&gt;4.7±0.04ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;4.26&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;7&lt;/td&gt; &lt;td&gt;5.0±0.04ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;4.54&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;8&lt;/td&gt; &lt;td&gt;5.3±0.07ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;4.83&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;9&lt;/td&gt; &lt;td&gt;5.7±0.11ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;5.16&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;10&lt;/td&gt;&lt;td&gt;5.9±0.07ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;5.38&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;11&lt;/td&gt;&lt;td&gt;6.3±0.13ns&lt;/td&gt;&lt;td&gt;1.1±0.02ns&lt;/td&gt;&lt;td&gt;5.68&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;12&lt;/td&gt;&lt;td&gt;6.6±0.33ns&lt;/td&gt;&lt;td&gt;1.1±0.02ns&lt;/td&gt;&lt;td&gt;5.92&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;13&lt;/td&gt;&lt;td&gt;6.9±0.15ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;6.28&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;14&lt;/td&gt;&lt;td&gt;7.2±0.04ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;6.50&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;15&lt;/td&gt;&lt;td&gt;7.5±0.04ns&lt;/td&gt;&lt;td&gt;1.1±0.01ns&lt;/td&gt;&lt;td&gt;6.79&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;
+  &lt;code&gt;H3&lt;/code&gt; uses a loop (&lt;code&gt;O(resolution)&lt;/code&gt;) whereas
+  &lt;code&gt;h3o&lt;/code&gt; relies on a 128-bit bitmap to provide a &lt;code&gt;O(1)&lt;/code&gt;
+  test.
+&lt;/p&gt;
+
+&lt;h4&gt;isValidCell&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/isValidCell.png" class="centered" title="isValidCell benchmark" alt="isValidCell benchmark"&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  Like what has been done for &lt;code&gt;isPentagon&lt;/code&gt;, every loop in the
+  &lt;code&gt;H3&lt;/code&gt; implementation has been converted into constant-time
+  operations thanks to clever bit-twiddling tricks.
+  &lt;br/&gt;
+  The curious reader can look at the implementation, lengthily documented, in
+  &lt;a href="https://github.com/HydroniumLabs/h3o/blob/master/src/index/cell.rs"&gt;src/index/cell.rs&lt;/a&gt;
+  (look for &lt;code&gt;TryFrom&amp;lt;u64&amp;gt;&lt;/code&gt; and &lt;code&gt;has_unused_direction&lt;/code&gt;).
+&lt;/p&gt;
+&lt;p&gt;
+  The same pattern can be observed on &lt;code&gt;isValidDirectedEdge&lt;/code&gt;, for the
+  same reasons.
+&lt;p&gt;
+
+&lt;h4&gt;latLngToCell&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/latLngToCell.png" class="centered" title="latLngToCell benchmark" alt="latLngToCell benchmark"&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  On hexagons, &lt;code&gt;h3o&lt;/code&gt; has a nice performance advantage (20 to 60%),
+  maybe because it has an &lt;code&gt;O(1)&lt;/code&gt; cell rotation for hexagons
+  (&lt;code&gt;H3&lt;/code&gt; has an &lt;code&gt;O(rotation count)&lt;/code&gt; one).
+&lt;/p&gt;
+&lt;p&gt;
+  On the other hand, we're consistently slower (5 to 10%) than &lt;code&gt;H3&lt;/code&gt;
+  on pentagons, which should be investigated at some point.
+&lt;/p&gt;
+
+&lt;h4&gt;maxPolygonToCellsSize&lt;/h4&gt;
+&lt;p&gt;
+  &lt;ul&gt;
+    &lt;li&gt;&lt;code&gt;H3&lt;/code&gt;: 4.8±0.08µs&lt;/li&gt;
+    &lt;li&gt;&lt;code&gt;h3o&lt;/code&gt;: 35.4±0.18ns&lt;/li&gt;
+  &lt;/ul&gt;
+  Thus, a x136 speedup!
+  &lt;br /&gt;
+  But this is misleading.
+&lt;/p&gt;
+&lt;p&gt;
+  What happens here is that &lt;code&gt;h3o&lt;/code&gt; works on special geometry types that (amongst other things):
+  &lt;ul&gt;
+    &lt;li&gt;check that geometry is correct (e.g. no infinite coordinates)&lt;/li&gt;
+    &lt;li&gt;compute the bounding box&lt;/li&gt;
+  &lt;/ul&gt;
+  Because of that, some computation costs are pre-paid when you're calling
+  geometrical functions of those shapes (which is pretty cool if you reuse a
+  shape several times since you'll pay those costs only once).
+&lt;/p&gt;
+&lt;p&gt;
+  And that's what we see here: in &lt;code&gt;H3&lt;/code&gt;
+  &lt;code&gt;maxPolygonToCellsSize&lt;/code&gt; computes the bounding box &lt;b&gt;AND&lt;/b&gt;
+  estimates the number of indexes, whereas in &lt;code&gt;h3o&lt;/code&gt; we only do the
+  estimation.
+&lt;/p&gt;
+&lt;p&gt;
+  Because of this API, in &lt;code&gt;H3&lt;/code&gt; you'll usually end up computing the
+  bounding box twice: once to estimate the size of the output set and again when
+  computing the indexes set.
+&lt;/p&gt;
+
+&lt;h4&gt;polygonToCells&lt;/h4&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Resolution&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;H3&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;h3o&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;Speedup&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;0 &lt;/td&gt;&lt;td&gt;  1.2±0.02ms&lt;/td&gt;&lt;td&gt;163.4±1.52µs &lt;/td&gt;&lt;td&gt; 7.07&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;1 &lt;/td&gt;&lt;td&gt;  2.0±0.03ms&lt;/td&gt;&lt;td&gt;202.2±2.34µs &lt;/td&gt;&lt;td&gt;10.02&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;2 &lt;/td&gt;&lt;td&gt;  1.2±0.01ms&lt;/td&gt;&lt;td&gt;215.7±0.92µs &lt;/td&gt;&lt;td&gt; 5.59&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;3 &lt;/td&gt;&lt;td&gt;  2.1±0.03ms&lt;/td&gt;&lt;td&gt;227.8±2.06µs &lt;/td&gt;&lt;td&gt; 9.02&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;4 &lt;/td&gt;&lt;td&gt;  1.3±0.01ms&lt;/td&gt;&lt;td&gt;244.2±3.68µs &lt;/td&gt;&lt;td&gt; 5.25&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;5 &lt;/td&gt;&lt;td&gt;  2.2±0.02ms&lt;/td&gt;&lt;td&gt;257.3±2.62µs &lt;/td&gt;&lt;td&gt; 8.37&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;6 &lt;/td&gt;&lt;td&gt;  1.4±0.01ms&lt;/td&gt;&lt;td&gt;279.3±3.38µs &lt;/td&gt;&lt;td&gt; 5.11&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;7 &lt;/td&gt;&lt;td&gt;  2.5±0.02ms&lt;/td&gt;&lt;td&gt;371.9±10.09µs&lt;/td&gt;&lt;td&gt; 6.69&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;8 &lt;/td&gt;&lt;td&gt;  2.4±0.02ms&lt;/td&gt;&lt;td&gt;789.2±21.81µs&lt;/td&gt;&lt;td&gt; 3.10&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;9 &lt;/td&gt;&lt;td&gt;  7.3±0.02ms&lt;/td&gt;&lt;td&gt;  3.3±0.06ms &lt;/td&gt;&lt;td&gt; 2.19&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;10&lt;/td&gt;&lt;td&gt; 25.6±0.15ms&lt;/td&gt;&lt;td&gt; 19.5±0.33ms &lt;/td&gt;&lt;td&gt; 1.31&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;11&lt;/td&gt;&lt;td&gt;146.3±0.63ms&lt;/td&gt;&lt;td&gt;127.1±1.34ms &lt;/td&gt;&lt;td&gt; 1.15&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;12&lt;/td&gt;&lt;td&gt;938.9±3.41ms&lt;/td&gt;&lt;td&gt;868.2±9.16ms &lt;/td&gt;&lt;td&gt; 1.08&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;
+  Seems like the more indexes there are in the output, the smaller the gap
+  between &lt;code&gt;H3&lt;/code&gt; and &lt;code&gt;h3o&lt;/code&gt;.
+&lt;/p&gt;
+&lt;p&gt;
+  One thing to notice though is that &lt;code&gt;H3&lt;/code&gt; seems to have a noticeable
+  overhead for class Ⅲ resolutions.
+&lt;br/&gt;
+  Doesn't seems to be the case for &lt;code&gt;h3o&lt;/code&gt;, and I'm not sure why
+  (&lt;code&gt;gridDisk&lt;/code&gt; being in the inner loop, the difference probably stems
+  from here).
+&lt;/p&gt;
+
+&lt;h4&gt;stringToH3&lt;/h4&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Index&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;H3&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;h3o&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;Speedup&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Cell index&lt;/td&gt;  &lt;td&gt;69.5±0.99ns&lt;/td&gt;&lt;td&gt;14.8±0.13ns&lt;/td&gt;&lt;td&gt;4.68&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Edge index&lt;/td&gt;  &lt;td&gt;71.1±0.33ns&lt;/td&gt;&lt;td&gt;19.4±0.15ns&lt;/td&gt;&lt;td&gt;3.67&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;Vertex index&lt;/td&gt;&lt;td&gt;72.8±0.47ns&lt;/td&gt;&lt;td&gt;20.6±0.11ns&lt;/td&gt;&lt;td&gt;3.54&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;
+  This one is interesting!
+&lt;/p&gt;
+&lt;p&gt;
+  The &lt;code&gt;H3&lt;/code&gt; implementation is nothing more than a sscanf, with no
+  extra validity check whatsoever (i.e it just checks that the string is a valid
+  hex representation of an unsigned 64-bit number).
+  &lt;br/&gt;
+  In &lt;code&gt;h3o&lt;/code&gt; we call &lt;code&gt;isValidXXX&lt;/code&gt; on the parsed string, to
+  ensure that the resulting number is indeed a valid index. And even with that,
+  it's still faster: nice.
+&lt;/p&gt;
+&lt;p&gt;
+  It's probably because parsing an integer from a string is faster in Rust than
+  using &lt;code&gt;sscanf&lt;/code&gt; in C. To be honest, this is not surprising given
+  that &lt;code&gt;scanf&lt;/code&gt; functions family is kinda generic as it needs to parse
+  a lot of different things. &lt;code&gt;H3&lt;/code&gt; could probably be faster here by
+  using a function from the &lt;code&gt;strtoul&lt;/code&gt; family (since they are more
+  specialized, they ought to be faster).
+&lt;/p&gt;
+
+&lt;h2&gt;h3-on-h3o (a.k.a h3oh3o): the H3-compatible C binding&lt;/h2&gt;
+
+&lt;p&gt;
+  Once the Rust version is complete, it's time to export us to other languages!
+&lt;/p&gt;
+&lt;p&gt;
+  The preferred path would be to have a C API as close as idiomatically possible
+  to the Rust one, and also a series of native bindings (using
+  &lt;a href="https://cxx.rs"&gt;CXX&lt;/a&gt; for C++,
+  &lt;a href="https://github.com/PyO3/pyo3"&gt;PyO3&lt;/a&gt; for Python,
+  &lt;a href="https://github.com/danielpclark/rutie"&gt;rutie&lt;/a&gt; for Ruby,
+  &lt;a href="https://mozilla.github.io/uniffi-rs/"&gt;uniffi&lt;/a&gt; for Swift and
+  Kotlin, etc.).
+&lt;/p&gt;
+&lt;p&gt;
+  Another path is to write a C API that mimics the &lt;code&gt;H3&lt;/code&gt; one which
+  allows easier testing of &lt;code&gt;h3o&lt;/code&gt; in C project without modifying the
+  code and leverages existing bindings by replacing &lt;code&gt;H3&lt;/code&gt; with
+  &lt;code&gt;h3o&lt;/code&gt; with minimal changes.
+&lt;/p&gt;
+&lt;p&gt;
+  While I prefer the former path, I started with the latter since it was the
+  quickest one to allow those who are interested to test h3o with a minimal
+  amount of friction.
+&lt;/p&gt;
+&lt;p&gt;
+  And here we are with "H3 on h3o", a.k.a the
+  &lt;a href="https://github.com/HydroniumLabs/h3oh3o"&gt;h3oh3o&lt;/a&gt; C library.
+&lt;/p&gt;
+&lt;p&gt;
+  An advantage of being isofunctional with &lt;code&gt;H3&lt;/code&gt; in terms of API is
+  that we can leverage their test suites and benchmarks. Let's see how the
+  binding performs compared to the original one:
+&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Test&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;H3&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;h3o&lt;/code&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;code&gt;Speedup&lt;/code&gt;&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;latLngToCell                         &lt;/td&gt;&lt;td&gt;    0.8463µs&lt;/td&gt;&lt;td&gt;    0.3880µs&lt;/td&gt;&lt;td&gt; 2.18&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;cellToLatLng                         &lt;/td&gt;&lt;td&gt;    0.5839µs&lt;/td&gt;&lt;td&gt;    0.2223µs&lt;/td&gt;&lt;td&gt; 2.63&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;cellToBoundary                       &lt;/td&gt;&lt;td&gt;    1.9786µs&lt;/td&gt;&lt;td&gt;    0.8314µs&lt;/td&gt;&lt;td&gt; 2.38&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridDisk10                           &lt;/td&gt;&lt;td&gt;    8.1998µs&lt;/td&gt;&lt;td&gt;    4.0217µs&lt;/td&gt;&lt;td&gt; 2.04&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridDisk20                           &lt;/td&gt;&lt;td&gt;   18.7210µs&lt;/td&gt;&lt;td&gt;   15.6767µs&lt;/td&gt;&lt;td&gt; 1.19&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridDisk30                           &lt;/td&gt;&lt;td&gt;   41.1222µs&lt;/td&gt;&lt;td&gt;   34.9652µs&lt;/td&gt;&lt;td&gt; 1.18&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridDisk40                           &lt;/td&gt;&lt;td&gt;   72.2542µs&lt;/td&gt;&lt;td&gt;   60.2216µs&lt;/td&gt;&lt;td&gt; 1.20&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridDiskPentagon10                   &lt;/td&gt;&lt;td&gt;   98.4980µs&lt;/td&gt;&lt;td&gt;   20.0700µs&lt;/td&gt;&lt;td&gt; 4.91&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridDiskPentagon20                   &lt;/td&gt;&lt;td&gt;  900.3940µs&lt;/td&gt;&lt;td&gt;   83.7700µs&lt;/td&gt;&lt;td&gt;10.75&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridDiskPentagon30                   &lt;/td&gt;&lt;td&gt; 3041.5400µs&lt;/td&gt;&lt;td&gt;  194.8000µs&lt;/td&gt;&lt;td&gt;15.61&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridDiskPentagon40                   &lt;/td&gt;&lt;td&gt; 7308.9000µs&lt;/td&gt;&lt;td&gt;  352.7000µs&lt;/td&gt;&lt;td&gt;20.72&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridPathCellsNear                    &lt;/td&gt;&lt;td&gt;    9.3828µs&lt;/td&gt;&lt;td&gt;    4.7500µs&lt;/td&gt;&lt;td&gt; 1.98&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;gridPathCellsFar                     &lt;/td&gt;&lt;td&gt;  413.6840µs&lt;/td&gt;&lt;td&gt;  202.5150µs&lt;/td&gt;&lt;td&gt; 2.04&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;directedEdgeToBoundary               &lt;/td&gt;&lt;td&gt;    5.0940µs&lt;/td&gt;&lt;td&gt;    2.4453µs&lt;/td&gt;&lt;td&gt; 2.08&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;cellToVertexes                       &lt;/td&gt;&lt;td&gt;    3.4804µs&lt;/td&gt;&lt;td&gt;    1.3102µs&lt;/td&gt;&lt;td&gt; 2.66&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;cellToVertexesPent                   &lt;/td&gt;&lt;td&gt;    0.0940µs&lt;/td&gt;&lt;td&gt;    0.0218µs&lt;/td&gt;&lt;td&gt; 4.31&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;cellToVertexesRing                   &lt;/td&gt;&lt;td&gt;   26.0935µs&lt;/td&gt;&lt;td&gt;   19.3975µs&lt;/td&gt;&lt;td&gt; 1.35&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;cellToVertexesRingPent               &lt;/td&gt;&lt;td&gt;   22.3335µs&lt;/td&gt;&lt;td&gt;   16.7243µs&lt;/td&gt;&lt;td&gt; 1.34&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;pentagonChildren_2_8                 &lt;/td&gt;&lt;td&gt; 1230.5830µs&lt;/td&gt;&lt;td&gt;  306.0520µs&lt;/td&gt;&lt;td&gt; 4.02&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;pentagonChildren_8_14                &lt;/td&gt;&lt;td&gt; 1639.8300µs&lt;/td&gt;&lt;td&gt;  305.7790µs&lt;/td&gt;&lt;td&gt; 5.36&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;pentagonChildren_8_14_null_2         &lt;/td&gt;&lt;td&gt;  911.4570µs&lt;/td&gt;&lt;td&gt;  290.7800µs&lt;/td&gt;&lt;td&gt; 3.13&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;pentagonChildren_8_14_null_10        &lt;/td&gt;&lt;td&gt; 1524.6970µs&lt;/td&gt;&lt;td&gt;  320.1670µs&lt;/td&gt;&lt;td&gt; 4.76&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;pentagonChildren_8_14_null_100       &lt;/td&gt;&lt;td&gt; 1629.4420µs&lt;/td&gt;&lt;td&gt;  311.7200µs&lt;/td&gt;&lt;td&gt; 5.23&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;cellsToLinkedMultiPolygonRing2       &lt;/td&gt;&lt;td&gt;   35.9619µs&lt;/td&gt;&lt;td&gt;   21.0267µs&lt;/td&gt;&lt;td&gt; 1.71&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;cellsToLinkedMultiPolygonDonut       &lt;/td&gt;&lt;td&gt;   11.4595µs&lt;/td&gt;&lt;td&gt;    8.1216µs&lt;/td&gt;&lt;td&gt; 1.41&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;cellsToLinkedMultiPolygonNestedDonuts&lt;/td&gt;&lt;td&gt;   45.9831µs&lt;/td&gt;&lt;td&gt;   34.7755µs&lt;/td&gt;&lt;td&gt; 1.32&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;polygonToCellsSF                     &lt;/td&gt;&lt;td&gt;  838.2980µs&lt;/td&gt;&lt;td&gt;  534.1300µs&lt;/td&gt;&lt;td&gt; 1.57&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;polygonToCellsAlameda                &lt;/td&gt;&lt;td&gt; 1183.9940µs&lt;/td&gt;&lt;td&gt;  656.2240µs&lt;/td&gt;&lt;td&gt; 1.80&lt;/td&gt;&lt;/tr&gt;
+    &lt;tr&gt;&lt;td&gt;polygonToCellsSouthernExpansion      &lt;/td&gt;&lt;td&gt;36224.0000µs&lt;/td&gt;&lt;td&gt;28038.4000µs&lt;/td&gt;&lt;td&gt; 1.29&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;
+  Great! Seems like the benefits of &lt;code&gt;h3o&lt;/code&gt; weren't lost in the binding
+  layer: we're still noticeably faster than &lt;code&gt;H3&lt;/code&gt;.
+&lt;/p&gt;
+
+&lt;h3&gt;On compatibility&lt;/h3&gt;
+
+&lt;p&gt;
+  While &lt;code&gt;h3oh3o&lt;/code&gt; covers the whole API and strives to be isofunctional
+  to &lt;code&gt;H3&lt;/code&gt;, that's not always true when you look closely.
+&lt;/p&gt;
+&lt;p&gt;
+  On the happy path, no worries: the only divergences are from things
+  unspecified to begin with (e.g. the order of indexes returned by
+  &lt;code&gt;compactCells&lt;/code&gt;).
+  &lt;br/&gt;
+  But on the error path, it's on a best-effort basis: &lt;code&gt;h3oh3o&lt;/code&gt; may
+  detect more errors, returns a different error code, or simply return a
+  sensible default value instead of an error.
+  &lt;br/&gt;
+  This is partly due to implementation details and partly due to conscious
+  choice.
+&lt;/p&gt;
+&lt;p&gt;
+  Given that error codes were added in &lt;code&gt;H3&lt;/code&gt; v4, which is relatively
+  young, there is probably not a lot of code relying on precise error codes, but
+  at least now you know.
+&lt;/p&gt;
+
+&lt;h3&gt;Example with h3-py&lt;/h3&gt;
+
+&lt;p&gt;
+  How difficult is it to port an &lt;code&gt;H3&lt;/code&gt; binding to &lt;code&gt;h3oh3o&lt;/code&gt;?
+  &lt;br/&gt;
+  Let's see with &lt;a href="https://github.com/uber/h3-py"&gt;h3-py&lt;/a&gt;!
+&lt;/p&gt;
+&lt;p&gt;
+  A single patch is enough to get a working binding: simply replace the
+  &lt;code&gt;h3&lt;/code&gt; submodule with the &lt;code&gt;h3oh3o&lt;/code&gt; one, update the header
+  location and the names of a few constants, and voilà!
+&lt;/p&gt;
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="gd"&gt;--- a/.gitmodules
+&lt;/span&gt;&lt;span class="gi"&gt;+++ b/.gitmodules
+&lt;/span&gt;&lt;span class="p"&gt;@@ -1,3 +1,3 @@&lt;/span&gt;
+&lt;span class="gd"&gt;-[submodule "src/h3lib"]
+-	path = src/h3lib
+-	url = https://github.com/uber/h3
+&lt;/span&gt;&lt;span class="gi"&gt;+[submodule "src/h3olib"]
++	path = src/h3olib
++	url = git@github.com:HydroniumLabs/h3oh3o.git
+&lt;/span&gt;&lt;span class="gh"&gt;diff --git a/CMakeLists.txt b/CMakeLists.txt
+&lt;/span&gt;&lt;span class="gd"&gt;--- a/CMakeLists.txt
+&lt;/span&gt;&lt;span class="gi"&gt;+++ b/CMakeLists.txt
+&lt;/span&gt;&lt;span class="p"&gt;@@ -26,7 +26,7 @@&lt;/span&gt; turn_off(ENABLE_LINTING)
+
+ # Build the core library as static
+ set(BUILD_SHARED_LIBS OFF)
+&lt;span class="gd"&gt;-add_subdirectory(src/h3lib)
+&lt;/span&gt;&lt;span class="gi"&gt;+add_subdirectory(src/h3olib)
+&lt;/span&gt;
+ # Build the rest (other than the core library dependency) as shared
+ set(BUILD_SHARED_LIBS ON)
+&lt;span class="p"&gt;@@ -35,6 +35,6 @@&lt;/span&gt; add_subdirectory(src/h3)
+ # Include built h3api.h for Cython API
+ install(
+     FILES
+&lt;span class="gd"&gt;-        "${CMAKE_CURRENT_BINARY_DIR}/src/h3lib/src/h3lib/include/h3api.h"
+&lt;/span&gt;&lt;span class="gi"&gt;+        "${CMAKE_CURRENT_BINARY_DIR}/src/h3olib/gen/h3api.h"
+&lt;/span&gt;     DESTINATION
+         src/h3/_cy)
+&lt;span class="gh"&gt;diff --git a/src/h3/_cy/CMakeLists.txt b/src/h3/_cy/CMakeLists.txt
+&lt;/span&gt;&lt;span class="gd"&gt;--- a/src/h3/_cy/CMakeLists.txt
+&lt;/span&gt;&lt;span class="gi"&gt;+++ b/src/h3/_cy/CMakeLists.txt
+&lt;/span&gt;&lt;span class="p"&gt;@@ -11,7 +11,7 @@&lt;/span&gt; macro(add_cython_file filename)
+     add_library(${filename} MODULE ${filename} ${LIB_SOURCE_FILES} ${CONFIGURED_API_HEADER})
+     python_extension_module(${filename})
+     set_property(TARGET ${filename} PROPERTY C_STANDARD 99)
+&lt;span class="gd"&gt;-    target_link_libraries(${filename} h3)
+&lt;/span&gt;&lt;span class="gi"&gt;+    target_link_libraries(${filename} h3oh3o::h3oh3o)
+&lt;/span&gt;     install(TARGETS ${filename} LIBRARY DESTINATION src/h3/_cy)
+ endmacro()
+
+diff --git a/src/h3/_cy/h3lib.pxd b/src/h3/_cy/h3lib.pxd
+&lt;span class="gd"&gt;--- a/src/h3/_cy/h3lib.pxd
+&lt;/span&gt;&lt;span class="gi"&gt;+++ b/src/h3/_cy/h3lib.pxd
+&lt;/span&gt;&lt;span class="p"&gt;@@ -4,9 +4,9 @@&lt;/span&gt; from libc.stdint cimport uint32_t, uint64_t, int64_t
+ ctypedef basestring H3str
+
+ cdef extern from 'h3api.h':
+&lt;span class="gd"&gt;-    cdef int H3_VERSION_MAJOR
+-    cdef int H3_VERSION_MINOR
+-    cdef int H3_VERSION_PATCH
+&lt;/span&gt;&lt;span class="gi"&gt;+    cdef int H3O_VERSION_MAJOR
++    cdef int H3O_VERSION_MINOR
++    cdef int H3O_VERSION_PATCH
+&lt;/span&gt;
+     ctypedef uint64_t H3int 'H3Index'
+
+diff --git a/src/h3/_cy/util.pyx b/src/h3/_cy/util.pyx
+&lt;span class="gd"&gt;--- a/src/h3/_cy/util.pyx
+&lt;/span&gt;&lt;span class="gi"&gt;+++ b/src/h3/_cy/util.pyx
+&lt;/span&gt;&lt;span class="p"&gt;@@ -28,9 +28,9 @@&lt;/span&gt; cdef (double, double) coord2deg(h3lib.LatLng c) nogil:
+
+ cpdef basestring c_version():
+     v = (
+&lt;span class="gd"&gt;-        h3lib.H3_VERSION_MAJOR,
+-        h3lib.H3_VERSION_MINOR,
+-        h3lib.H3_VERSION_PATCH,
+&lt;/span&gt;&lt;span class="gi"&gt;+        h3lib.H3O_VERSION_MAJOR,
++        h3lib.H3O_VERSION_MINOR,
++        h3lib.H3O_VERSION_PATCH,
+&lt;/span&gt;     )
+
+     return '{}.{}.{}'.format(*v)
+&lt;span class="gh"&gt;diff --git a/src/h3lib b/src/h3lib
+&lt;/span&gt;&lt;span class="p"&gt;deleted file mode 160000
+&lt;/span&gt;&lt;span class="gd"&gt;--- a/src/h3lib
+&lt;/span&gt;&lt;span class="gi"&gt;+++ /dev/null
+&lt;/span&gt;&lt;span class="p"&gt;@@ -1 +0,0 @@&lt;/span&gt;
+&lt;span class="gd"&gt;-Subproject commit 46a581c905b2747c861aa1683125276501f68a3b
+&lt;/span&gt;&lt;span class="gh"&gt;diff --git a/src/h3olib b/src/h3olib
+&lt;/span&gt;&lt;span class="p"&gt;new file mode 160000
+&lt;/span&gt;&lt;span class="gd"&gt;--- /dev/null
+&lt;/span&gt;&lt;span class="gi"&gt;+++ b/src/h3olib
+&lt;/span&gt;&lt;span class="p"&gt;@@ -0,0 +1 @@&lt;/span&gt;
+&lt;span class="gi"&gt;+Subproject commit 66e352341384b6a67c8c47487febf123406e1f14
+&lt;/span&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  Add another little patch to adapt the test suite to &lt;code&gt;h3oh3o&lt;/code&gt; and
+  you get a working binding with a green test suite.
+&lt;/p&gt;
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="gd"&gt;--- a/tests/test_cells_and_edges.py
+&lt;/span&gt;&lt;span class="gi"&gt;+++ b/tests/test_cells_and_edges.py
+&lt;/span&gt;&lt;span class="p"&gt;@@ -8,6 +8,8 @@&lt;/span&gt; from h3 import (
+     H3ResMismatchError,
+     H3CellInvalidError,
+     H3NotNeighborsError,
+&lt;span class="gi"&gt;+    H3DirEdgeInvalidError,
++    H3PentagonError,
+&lt;/span&gt; )
+
+
+&lt;span class="p"&gt;@@ -159,8 +161,9 @@&lt;/span&gt; def test_parent_err():
+ def test_children():
+     h = '8928308280fffff'
+
+-    with pytest.raises(H3ResDomainError):
+&lt;span class="gd"&gt;-        h3.cell_to_children(h, 8)
+&lt;/span&gt;&lt;span class="gi"&gt;+    # H3O returns an empty set of children when resolution is coarser.
++    out = h3.cell_to_children(h, 8)
++    assert out == set()
+&lt;/span&gt;
+     # same resolution is set of just cell itself
+     out = h3.cell_to_children(h, 9)
+&lt;span class="p"&gt;@@ -442,10 +445,13 @@&lt;/span&gt; def test_edges():
+     e_bad = '14928308280ffff1'
+     assert not h3.is_valid_directed_edge(e_bad)
+
+-    # note: won't raise an error on bad input
+&lt;span class="gd"&gt;-    h3.get_directed_edge_origin(e_bad)
+-    h3.get_directed_edge_destination(e_bad)
+-    h3.directed_edge_to_cells(e_bad)
+&lt;/span&gt;&lt;span class="gi"&gt;+    # Those are correctly caught by H3O
++    with pytest.raises(H3DirEdgeInvalidError):
++        h3.get_directed_edge_origin(e_bad)
++    with pytest.raises(H3DirEdgeInvalidError):
++        h3.get_directed_edge_destination(e_bad)
++    with pytest.raises(H3DirEdgeInvalidError):
++        h3.directed_edge_to_cells(e_bad)
+&lt;/span&gt;
+
+ def test_line():
+&lt;span class="p"&gt;@@ -463,18 +469,19 @@&lt;/span&gt; def test_line():
+     assert out == expected
+
+
+&lt;span class="gd"&gt;-def test_versions():
+-    from packaging.version import Version
+-
+-    v = h3.versions()
+-
+-    assert v['python'] == h3.__version__
+-
+-    v_c = Version(v['c'])
+-    v_p = Version(v['python'])
+-
+-    # of X.Y.Z, X and Y must match
+-    assert v_c.release[:2] == v_p.release[:2]
+&lt;/span&gt;&lt;span class="gi"&gt;+# No longer true with H3O since numbering goes back to 0.1.0
++#def test_versions():
++#    from packaging.version import Version
++#
++#    v = h3.versions()
++#
++#    assert v['python'] == h3.__version__
++#
++#    v_c = Version(v['c'])
++#    v_p = Version(v['python'])
++#
++#    # of X.Y.Z, X and Y must match
++#    assert v_c.release[:2] == v_p.release[:2]
+&lt;/span&gt;
+
+ def test_str_int_convert():
+&lt;span class="p"&gt;@@ -615,7 +622,7 @@&lt;/span&gt; def test_from_local_ij_error():
+
+     baddies = [(1, -1), (-1, 1), (-1, -1)]
+     for i, j in baddies:
+&lt;span class="gd"&gt;-        with pytest.raises(H3FailedError):
+&lt;/span&gt;&lt;span class="gi"&gt;+        with pytest.raises((H3PentagonError, H3FailedError)):
+&lt;/span&gt;             h3.local_ij_to_cell(h, i, j)
+
+     # inverting output should give good data
+&lt;span class="gh"&gt;diff --git a/tests/test_h3.py b/tests/test_h3.py
+&lt;/span&gt;&lt;span class="gd"&gt;--- a/tests/test_h3.py
+&lt;/span&gt;&lt;span class="gi"&gt;+++ b/tests/test_h3.py
+&lt;/span&gt;&lt;span class="p"&gt;@@ -471,9 +471,8 @@&lt;/span&gt; def test_compact_cells_and_uncompact_cells_nothing():
+
+ def test_uncompact_cells_error():
+     hexagons = [h3.latlng_to_cell(37, -122, 10)]
+&lt;span class="gd"&gt;-
+-    with pytest.raises(Exception):
+-        h3.uncompact_cells(hexagons, 5)
+&lt;/span&gt;&lt;span class="gi"&gt;+    # H3O return an empty set when unpacking to a coarser resolution.
++    h3.uncompact_cells(hexagons, 5) == set()
+&lt;/span&gt;
+
+ def test_compact_cells_malformed_input():
+&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+&lt;p&gt;You can now use &lt;code&gt;h3o&lt;/code&gt; in Python.&lt;/p&gt;
+
+&lt;h2&gt;h3o-cli: the H3 Swiss Army knife CLI&lt;/h2&gt;
+&lt;p&gt;
+  &lt;a href="https://github.com/HydroniumLabs/h3o-cli"&gt;h3o-cli&lt;/a&gt; brings the
+  power of &lt;code&gt;h3o&lt;/code&gt; to your fingertips. Its main purpose is to replace
+  the one-shot scripts you would write to quickly test or verify something
+  (e.g. convert a shape to indexes, describe a cell index, print resolution
+  statistics, …)
+&lt;/p&gt;
+&lt;p&gt;
+  Each subcommand has up to four output formats:
+  &lt;ul&gt;
+    &lt;li&gt;text: for human consumption or commands pipelines&lt;/li&gt;
+    &lt;li&gt;JSON: for program consumption and scripting (easier parsing)&lt;/li&gt;
+    &lt;li&gt;
+      GeoJSON: for visualization (e.g. using
+      &lt;a href="https://geojson.io"&gt;geojson.io&lt;/a&gt;)
+    &lt;/li&gt;
+    &lt;li&gt;KML: for vizualization too&lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  Note that the CLI is built with composition in mind, as such the output of
+  some subcommands can be piped into other subcommands, allowing to build
+  complex processing pipelines easily.
+  &lt;br/&gt;
+  For instance, the following command computes the coverage of Paris, from a
+  GeoJSON file, and compacts then compresses the resulting set into an output
+  file.
+&lt;/p&gt;
+
+    &lt;figure class="code"&gt;
+      
+      &lt;div class="highlight"&gt;
+        &lt;pre&gt;h3o-cli geomToCells -r 11 -f geojson &amp;lt; paris.geojson \
+    | h3o-cli compact \
+    | h3o-cli compress &amp;gt; cells.thc
+&lt;/pre&gt;
+      &lt;/div&gt;
+    &lt;/figure&gt;
+
+
+&lt;p&gt;
+  The CLI doesn't cover the whole API yet, it's currently focused on the subset
+  I found myself using the most but I plan to enrich it as time pass.
+&lt;/p&gt;
+
+&lt;h2&gt;thc: a compression scheme tailored for H3&lt;/h2&gt;
+
+&lt;p&gt;
+  &lt;a href="https://github.com/HydroniumLabs/thc"&gt;thc (The H3 Compressor)&lt;/a&gt;
+  is a library that provides compression algorithms tailored for H3.
+&lt;/p&gt;
+&lt;p&gt;
+  The first (and only for now) algorithm provided is CHT (Compressed H3 Tree)
+  which is optimized for compression size. The main use cases would be on-disk
+  storage or transfers across the network.
+&lt;/p&gt;
+&lt;p&gt;
+  The &lt;code&gt;H3&lt;/code&gt; library already provides a compaction algorithm, but it
+  has some limitations:
+  &lt;ul&gt;
+    &lt;li&gt;only works on homogeneous (in terms of resolutions) sets&lt;/li&gt;
+    &lt;li&gt;
+      doesn't compress the index (an index is still 64-bit), only reduces their
+      number
+    &lt;/li&gt;
+    &lt;li&gt;
+      is almost useless on input sets with (almost) no clusters (e.g. paths)
+    &lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  CHT addresses those weaknesses:
+  &lt;ul&gt;
+    &lt;li&gt;can take heterogeneous sets as input&lt;/li&gt;
+    &lt;li&gt;
+      indexes are compressed, at best it goes from 64 bits/index to 2.3
+      bits/index
+    &lt;/li&gt;
+    &lt;li&gt;
+      cluster-less input sets can also be compressed (albeit less efficiently
+      since there is less information redundancy, but still usually goes down
+      from 64-bit/index to 6.25 bits/index).
+    &lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  CHT accomplishes this by viewing the H3 system as a gigantic tree, where
+  resolutions are levels and cell indexes encode paths into this tree. A set of
+  cell indexes is equivalent to a set of paths, that once grouped together forms
+  a subtree. This subtree is then encoded in a compact way.
+  &lt;br/&gt;
+  The curious reader can inspect the source code at
+  &lt;a href="https://github.com/HydroniumLabs/thc/blob/master/src/cht.rs"&gt;cht.rs&lt;/a&gt;,
+  where the implementation details are documented, with step-by-step examples.
+&lt;/p&gt;
+
+&lt;h3&gt;Benchmark&lt;/h3&gt;
+
+&lt;h4&gt;Dense set: Paris&lt;/h4&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/paris.jpg" class="centered" title="The shape of Paris" alt="The shape of Paris"&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  At resolution 11, Paris contains 54,812 cell indexes.  At 64-bit per index,
+  this represents ~438KB (438,496 bytes).
+&lt;/p&gt;
+&lt;p&gt;
+  If we compress these indexes using CHT, we get a payload ~27x smaller than the
+  original size (16,330 bytes, i.e. ~16KB) meaning that each index is encoded on
+  ~2.38 bits.
+&lt;/p&gt;
+&lt;p&gt;
+  If we compact these indexes, we get a similar result: a payload ~27x smaller
+  (16,192 bytes, a tad bit smaller than THC but still ~16KB). But the indexes
+  are still encoded on 64 bits, we've greatly reduced their number (from 54,812
+  to 2,024) instead of compressing them.
+&lt;/p&gt;
+&lt;p&gt;
+  Remember that CHT also works on heterogeneous index sets, like the one
+  produced by the compaction algorithm: what if we try to compress the compacted
+  set?
+  &lt;br/&gt;
+  In that case, we get a payload 17x smaller than the compacted one, with the
+  2,024 indexes being represented by 933 bytes (i.e. ~3.69 bits/index). Even
+  though the compression is less efficient (3.69 vs 2.38), since we have a lot
+  fewer indexes the end result is a lot better than compressing the uncompacted
+  set.
+&lt;/p&gt;
+&lt;p&gt;
+  In the end, we went from a ~438KB payload to one under 1KB (~x469 smaller),
+  effectively encoding 54,812 indexes on 933 bytes (equivalent to ~0.14
+  bits/index).
+&lt;/p&gt;
+&lt;p&gt;
+  Results are even more impressive applied at the country level (only
+  considering mainland France here): 267,532,208 indexes occupying ~2.14GB
+  (2,140,257,664 bytes) are reduced to a payload of ~103KB (103,348 bytes) by
+  &lt;code&gt;compact-then-compress&lt;/code&gt;, which is  20k times smaller  (equivalent
+  to ~0.003 bits/index) than the starting point.
+&lt;/p&gt;
+
+&lt;h4&gt;Sparse set: bikeways&lt;/h4&gt;
+&lt;p&gt;
+  Ok, that was the easy case: what about index sets representing things like
+  paths? How do we behave with this class of input?
+  &lt;br/&gt;
+  Let's find out by using a (non-exhaustive) map of France's bikeways as input!
+&lt;/p&gt;
+&lt;p&gt;
+  &lt;img src="/static/images/h3o/bikeways.jpg" class="centered" title="Bikeways in France" alt="Bikeways in France"&gt;
+&lt;/p&gt;
+&lt;p&gt;
+  At resolution 11 we have 690,451 indexes which represents a 5.52MB payload
+  (5,523,608 bytes).
+&lt;/p&gt;
+&lt;p&gt;
+  If we compact this index set, we don't gain much: we get a set of 689,971 (a
+  difference of 480 indexes only), which is not noticeably smaller (5,519,768
+  bytes, which is still 5.52MB).
+&lt;/p&gt;
+&lt;p&gt;
+  On the other hand, if the compress this index set we're down to ~539KB
+  (539,405 bytes), which is 10x smaller (each index is encoded on ~6.25 bits).
+&lt;/p&gt;
+&lt;p&gt;
+  While not as impressive as the previous test, which is not surprising as we're
+  kinda comparing best case vs worst case here, it's still an appreciable gain
+  (especially compared to the uselessness of the compaction on that kind of
+  index set).
+&lt;/p&gt;
+
+&lt;h2&gt;What's next&lt;/h2&gt;
+&lt;p&gt;
+  Even though the h3o API is expected to be close to its final state, I won't
+  rush for the 1.0 just yet. I first want to build more projects on top of it
+  to detect any rough edges that would need some adjustments.
+&lt;/p&gt;
+&lt;p&gt;
+  Short term, I would need to catch up with the soon-to-be-released
+  &lt;code&gt;H3&lt;/code&gt; 4.1.
+&lt;/p&gt;
+&lt;p&gt;
+  Medium-term, I plan to continue my work on a compact and efficient in-memory
+  data structure for indexes set of homogeneous resolution. Already have a very
+  promising first draft locally, but it still needs to be refined to reach a
+  releasable state.
+  &lt;br/&gt;
+  Also fix the functions that are still slower than &lt;code&gt;H3&lt;/code&gt;.
+&lt;/p&gt;
+&lt;p&gt;
+  Long term, will work on more bindings: a better C one and also dedicated
+  bindings for other languages (as mentioned above).
+&lt;/p&gt;
+</content>
+  </entry>
+  <entry>
+    <id>tag:grim7reaper.github.io,2019-12-06:/blog/2019/12/06/python-optimisation-et-couverture-de-code/</id>
     <title type="html">Python : optimisation et couverture de code</title>
     <published>2019-12-06T00:00:00Z</published>
     <updated>2019-12-06T00:00:00Z</updated>
-    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2019/12/06/python-optimisation-et-couverture-de-code/" type="text/html"/>
+    <link rel="alternate" href="https://grim7reaper.github.io/blog/2019/12/06/python-optimisation-et-couverture-de-code/" type="text/html"/>
     <content type="html">&lt;p&gt;
   Il est courant de vérifier si nos tests couvrent bien notre code, et en Python
   on utilise généralement
@@ -605,11 +1823,11 @@ ok2.py      11      0   100%
 </content>
   </entry>
   <entry>
-    <id>tag:grim7reaper.rolinh.ch,2019-11-17:/blog/2019/11/17/migration-du-blog-sur-nanoc/</id>
+    <id>tag:grim7reaper.github.io,2019-11-17:/blog/2019/11/17/migration-du-blog-sur-nanoc/</id>
     <title type="html">Migration du blog sur Nanoc</title>
     <published>2019-11-17T00:00:00Z</published>
     <updated>2019-11-17T00:00:00Z</updated>
-    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2019/11/17/migration-du-blog-sur-nanoc/" type="text/html"/>
+    <link rel="alternate" href="https://grim7reaper.github.io/blog/2019/11/17/migration-du-blog-sur-nanoc/" type="text/html"/>
     <content type="html">&lt;p&gt;
   Comme vous l’avez très certainement remarqué, le blog a changé d’apparence :
   c’est dû à la migration du blog sur Nanoc.
@@ -1230,11 +2448,11 @@ ok2.py      11      0   100%
 </content>
   </entry>
   <entry>
-    <id>tag:grim7reaper.rolinh.ch,2017-09-06:/blog/2017/09/06/compilation-a-la-volee-avec-ruby/</id>
+    <id>tag:grim7reaper.github.io,2017-09-06:/blog/2017/09/06/compilation-a-la-volee-avec-ruby/</id>
     <title type="html">Compilation à la volée avec Ruby</title>
     <published>2017-09-06T00:00:00Z</published>
     <updated>2017-09-06T00:00:00Z</updated>
-    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2017/09/06/compilation-a-la-volee-avec-ruby/" type="text/html"/>
+    <link rel="alternate" href="https://grim7reaper.github.io/blog/2017/09/06/compilation-a-la-volee-avec-ruby/" type="text/html"/>
     <content type="html">&lt;p&gt;
   Récemment, je suis tombé sur cette série d’articles d’Eli Bendersky sur la
   compilation à la volée (&lt;strong&gt;JIT compilation&lt;/strong&gt; : &lt;em&gt;Just-In-Time
@@ -2440,11 +3658,11 @@ jnz offset_vers_l_instruction_suivant_[
 </content>
   </entry>
   <entry>
-    <id>tag:grim7reaper.rolinh.ch,2016-10-11:/blog/2016/10/11/a-la-recherche-de-lespace-disque-perdu/</id>
+    <id>tag:grim7reaper.github.io,2016-10-11:/blog/2016/10/11/a-la-recherche-de-lespace-disque-perdu/</id>
     <title type="html">À la recherche de l’espace (disque) perdu…</title>
     <published>2016-10-11T00:00:00Z</published>
     <updated>2016-10-11T00:00:00Z</updated>
-    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2016/10/11/a-la-recherche-de-lespace-disque-perdu/" type="text/html"/>
+    <link rel="alternate" href="https://grim7reaper.github.io/blog/2016/10/11/a-la-recherche-de-lespace-disque-perdu/" type="text/html"/>
     <content type="html">&lt;p&gt;
   La semaine dernière j’ai aidé à résoudre un problème assez surprenant : une
   partition racine pleine selon &lt;code&gt;df&lt;/code&gt; (ou
@@ -2584,509 +3802,6 @@ systemd  709 grim7reaper  txt    REG  254,2 1018520     0 1619496 /usr/lib/syste
   basé sur libVTE. Cette petite mésaventure m’aura au moins fait découvrir un
   aspect fort utile de &lt;code&gt;lsof&lt;/code&gt;.
 &lt;/p&gt;
-</content>
-  </entry>
-  <entry>
-    <id>tag:grim7reaper.rolinh.ch,2014-09-04:/blog/2014/09/04/pretty-printer-avec-gdb/</id>
-    <title type="html">Pretty-printer avec GDB</title>
-    <published>2014-09-04T00:00:00Z</published>
-    <updated>2014-09-04T00:00:00Z</updated>
-    <link rel="alternate" href="https://grim7reaper.rolinh.ch/blog/2014/09/04/pretty-printer-avec-gdb/" type="text/html"/>
-    <content type="html">&lt;p&gt;
-  Depuis la
-  version 7.0&lt;sup id="fnref:1"&gt;&lt;a href="#fn:1"&gt;1&lt;/a&gt;&lt;/sup&gt; (sortie le
-  2009/10/06), GDB embarque un interpréteur Python cela qui permet d’utiliser
-  Python comme langage de scripting pour étendre les fonctionnalités de GDB.
-&lt;/p&gt;
-
-&lt;p&gt;
-  Dans cet article je vais aborder la création de &lt;em&gt;pretty-printer&lt;/em&gt; en
-  Python.
-&lt;/p&gt;
-
-&lt;h2&gt;Le problème&lt;/h2&gt;
-
-&lt;p&gt;
-  Comme un exemple vaut mieux qu’un long discours, je vais montrer ici un cas
-  pratique : l’affichage d’adresses IP.
-&lt;/p&gt;
-
-&lt;p&gt;Les systèmes POSIX représentent les adresses via deux structures:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;
-    &lt;code&gt;in_addr&lt;/code&gt; pour les IPv4 : une structure qui doit contenir au
-    minimum un champ &lt;code&gt;s_addr&lt;/code&gt; de type &lt;code&gt;in_addr_t&lt;/code&gt; (qui est
-    équivalent à &lt;code&gt;uint32_t&lt;/code&gt;).
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;code&gt;in6_addr&lt;/code&gt; pour les IPv6 : une structure qui doit contenir au
-    minimum un champ &lt;code&gt;s6_addr&lt;/code&gt; de type &lt;code&gt;uint8_t[16]&lt;/code&gt;.
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;
-  Ces informations, parmi d’autres, sont disponibles
-  &lt;a href="https://pubs.opengroup.org/onlinepubs/009695399/basedefs/netinet/in.h.html"&gt;ici&lt;/a&gt;.
-&lt;/p&gt;
-
-&lt;p&gt;
-  De par la définition de ces structures, si on veut les afficher dans GDB on
-  n’obtient quelque chose qui n’est pas très lisible pour un humain.
-&lt;/p&gt;
-
-&lt;p&gt;Soit le programme suivant :&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      &lt;figcaption&gt;exemple.c&lt;/figcaption&gt;
-      &lt;div class="highlight"&gt;
-        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#include &amp;lt;stdlib.h&amp;gt;
-&lt;/span&gt;
-&lt;span class="cp"&gt;#include &amp;lt;arpa/inet.h&amp;gt;
-&lt;/span&gt;
-&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="nf"&gt;main&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;void&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="p"&gt;{&lt;/span&gt;
-    &lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="n"&gt;sockaddr_in&lt;/span&gt;  &lt;span class="n"&gt;ipv4&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
-    &lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="n"&gt;sockaddr_in6&lt;/span&gt; &lt;span class="n"&gt;ipv6&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
-
-    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;inet_pton&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;  &lt;span class="s"&gt;"82.66.107.250"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;ipv4&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sin_addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;!=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;EXIT_FAILURE&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
-
-    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;inet_pton&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;"2a01:e35:2426:bfa0:215:ff:fe42:7fd3"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
-                  &lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;ipv6&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sin6_addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;!=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;EXIT_FAILURE&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
-
-    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;EXIT_SUCCESS&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;
-&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;Si on lance GDB dessus en utilisant le fichier de commande suivant :&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      &lt;figcaption&gt;command.gdb&lt;/figcaption&gt;
-      &lt;div class="highlight"&gt;
-        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;break example.c:17
-command
-silent
-print ipv4-&amp;gt;sin_addr
-print ipv6-&amp;gt;sin6_addr
-continue
-end
-
-run
-quit
-&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;On obtient :&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      &lt;figcaption&gt;Sortie produite&lt;/figcaption&gt;
-      &lt;div class="highlight"&gt;
-        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
-2
-3
-4
-5
-6
-7
-8
-&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;% gdb -q ./example --command=command.gdb 2&amp;gt; /dev/null
-Reading symbols from ./example...done.
-Breakpoint 1 at 0x8065581: file example.c, line 17.
-[Thread debugging using libthread_db enabled]
-Using host libthread_db library "/usr/lib/libthread_db.so.1".
-$1 = {s_addr = 4201333330}
-$2 = {__in6_u = {__u6_addr8 = "*\001\016\065$&amp;amp;\277\240\002\025\000\377\376B", &amp;lt;incomplete sequence \323&amp;gt;, __u6_addr16 = {298, 13582, 9764, 41151, 5378, 65280, 17150, 54143}, __u6_addr32 = {890110250, 2696881700, 4278195458, 3548332798}}}
-[Inferior 1 (process 2043) exited normally]
-&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;
-  Le moins que l’on puisse dire c’est que ce n’est pas
-  super &lt;em&gt;human-friendly&lt;/em&gt; (&lt;code&gt;$1&lt;/code&gt; étant l’IPv4 et &lt;code&gt;$2&lt;/code&gt;
-  l’IPv6).
-&lt;/p&gt;
-
-&lt;h2&gt;Les pretty-printers&lt;/h2&gt;
-
-&lt;p&gt;
-  Nous allons créer un module python &lt;code&gt;my_pp&lt;/code&gt;. Dans le
-  répertoire &lt;em&gt;my_pp&lt;/em&gt;, nous aurons deux fichiers :
-&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;
-    &lt;code&gt;netinet.py&lt;/code&gt; qui contiendra le code des &lt;em&gt;pretty-printers&lt;/em&gt;.
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;code&gt;__init__.py&lt;/code&gt; qui se chargera d’enregistrer
-    nos &lt;em&gt;pretty-printers&lt;/em&gt; auprès de GDB.
-  &lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;
-  Commençons avec le premier fichier (j’ai omis les &lt;em&gt;docstrings&lt;/em&gt; pour
-  raccourcir le code).
-&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      &lt;figcaption&gt;netinet.py&lt;/figcaption&gt;
-      &lt;div class="highlight"&gt;
-        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;struct&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;
-&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;socket&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;AF_INET6&lt;/span&gt;
-
-&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;gdb&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;lookup_type&lt;/span&gt;
-
-&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;ipv4Printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'I'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;'s_addr'&lt;/span&gt;&lt;span class="p"&gt;]))&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-
-&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;ipv6Printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="c1"&gt;# IPv6 addresses have a size of 128 bits (== 16 octets).
-&lt;/span&gt;        &lt;span class="n"&gt;N&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt;
-        &lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;cast&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lookup_type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;"uint8_t"&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;array&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'B'&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;)])&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;Allons y étape par étape.&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      &lt;figcaption&gt;Les imports&lt;/figcaption&gt;
-      &lt;div class="highlight"&gt;
-        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
-2
-3
-4
-&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;struct&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;
-&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;socket&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;AF_INET6&lt;/span&gt;
-
-&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;gdb&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;lookup_type&lt;/span&gt;
-&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;
-  Les adresses IP étant stockées sous forme binaire, on importe le
-  module &lt;code&gt;struct&lt;/code&gt; pour pouvoir les manipuler. Le
-  module &lt;code&gt;socket&lt;/code&gt; va nous servir à les convertir en chaîne de
-  caractères&lt;sup id="fnref:2"&gt;&lt;a href="#fn:2"&gt;2&lt;/a&gt;&lt;/sup&gt;. Enfin, on importe le
-  module &lt;code&gt;gdb&lt;/code&gt;.
-&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      &lt;figcaption&gt;Pretty-printer pour l’IPv4&lt;/figcaption&gt;
-      &lt;div class="highlight"&gt;
-        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
-2
-3
-4
-5
-6
-&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;ipv4Printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'I'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;'s_addr'&lt;/span&gt;&lt;span class="p"&gt;]))&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;
-  Lorsque GDB va instancier un objet &lt;code&gt;ipv4Printer&lt;/code&gt;, il va lui passer
-  en argument une structure de type &lt;code&gt;in_addr&lt;/code&gt;. Comme dit
-  précédemment, cette structure contient un champ &lt;code&gt;s_addr&lt;/code&gt; qui est
-  un &lt;code&gt;uint32_t&lt;/code&gt;. Notre méthode d’initialisation se contente donc
-  d’extraire ce champ dans le membre &lt;code&gt;addr&lt;/code&gt; de notre objet.
-&lt;/p&gt;
-
-&lt;p&gt;
-  Ensuite, la méthode &lt;code&gt;to_string&lt;/code&gt; est appelée par GDB à chaque fois
-  qu’il doit afficher un objet de type &lt;code&gt;in_addr&lt;/code&gt;. Cette méthode
-  renvoie la chaîne de caractère représentant l’adresse IP contenue
-  dans &lt;code&gt;addr&lt;/code&gt;.
-&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      &lt;figcaption&gt;Pretty-printer pour l’IPv6&lt;/figcaption&gt;
-      &lt;div class="highlight"&gt;
-        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
-2
-3
-4
-5
-6
-7
-8
-9
-&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;ipv6Printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="c1"&gt;# IPv6 addresses have a size of 128 bits (== 16 octets).
-&lt;/span&gt;        &lt;span class="n"&gt;N&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt;
-        &lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;cast&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lookup_type&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;"uint8_t"&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;array&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;pack&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'B'&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;)])&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;inet_ntop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;AF_INET6&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;
-  En théorie; la version IPv6 devrait être aussi simple que la version IPv4. En
-  théorie… En pratique c’est malheureusement plus compliqué.
-&lt;/p&gt;
-
-&lt;p&gt;
-  En effet, si POSIX requiert que la structure &lt;code&gt;in6_addr_t&lt;/code&gt; possède
-  un champ nommé &lt;code&gt;s6_addr&lt;/code&gt; le fait est que, la plupart du temps, ce
-  membre n’existe pas vraiment: c’est un symbole de préprocesseur. En tant que
-  tel, il n’est pas accessible dans GDB (sauf si on utilise certaines options de
-  compilation bien spécifiques telle que &lt;code&gt;-g3&lt;/code&gt;
-  et &lt;code&gt;-gdwarf-2&lt;/code&gt; par exemple). Pis encore, Windows ne définit pas ce
-  membre du tout (Windows ne cherche pas vraiment à être conforme POSIX).
-&lt;/p&gt;
-
-&lt;p&gt;
-  La solution que j’ai trouvée est de traiter la structure &lt;code&gt;in6_addr&lt;/code&gt;
-  comme un tableau de 16 octets. Cela fonctionne et me semble relativement
-  portable étant donné que la structure &lt;code&gt;in6_addr&lt;/code&gt; est définie comme
-  une union dont l’un des champs est effectivement un &lt;code&gt;uint8_t[16]&lt;/code&gt;
-  au moins sur les systèmes d’exploitation suivant :
-&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;
-    &lt;a href="https://github.com/torvalds/linux/blob/master/include/uapi/linux/in6.h"&gt;Linux&lt;/a&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;a href="https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/sys/netinet6/in6.h"&gt;DragonFlyBSD&lt;/a&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;a href="https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms738560(v=vs.85)?redirectedfrom=MSDN"&gt;Windows&lt;/a&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;a href="https://svnweb.freebsd.org/base/stable/9/sys/netinet6/in6.h?revision=244524&amp;view=markup"&gt;FreeBSD&lt;/a&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;a href="https://web.archive.org/web/20160327001511/http://cvsweb.netbsd.org/bsdweb.cgi/src/sys/netinet6/in6.h?rev=1.78&amp;content-type=text/x-cvsweb-markup&amp;only_with_tag=MAIN"&gt;NetBSD&lt;/a&gt;
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;
-  La méthode &lt;code&gt;__init__&lt;/code&gt; de notre objet va donc &lt;em&gt;caster&lt;/em&gt; la
-  valeur puis la stocker dans l’attribut &lt;code&gt;addr&lt;/code&gt;. Au niveau de la
-  méthode &lt;code&gt;to_string&lt;/code&gt;, c’est quasiment la même chose que
-  pour &lt;code&gt;ipv4Printer&lt;/code&gt; (on remplace seulement &lt;code&gt;AF_INET&lt;/code&gt;
-  par &lt;code&gt;AF_INET6&lt;/code&gt;).
-&lt;/p&gt;
-
-&lt;p&gt;
-    Enfin, l’enregistrement de nos deux classes se fait dans le fichier
-    &lt;code&gt;__init__.py&lt;/code&gt;.
-&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      &lt;figcaption&gt;__init__.py&lt;/figcaption&gt;
-      &lt;div class="highlight"&gt;
-        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
-2
-3
-4
-5
-6
-7
-8
-&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;gdb.printing&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;RegexpCollectionPrettyPrinter&lt;/span&gt;
-&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;netinet&lt;/span&gt;
-
-&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;netinet_pp&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
-    &lt;span class="n"&gt;pp&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;RegexpCollectionPrettyPrinter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;"netinet"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-    &lt;span class="n"&gt;pp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'in_addr'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;  &lt;span class="s"&gt;'^in_addr$'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;  &lt;span class="n"&gt;netinet&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ipv4Printer&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-    &lt;span class="n"&gt;pp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_printer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;'in6_addr'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;'^in6_addr$'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;netinet&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ipv6Printer&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;pp&lt;/span&gt;
-&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;
-  On commence par importer le module &lt;code&gt;gdb.printing&lt;/code&gt;, puis
-  nos &lt;em&gt;pretty-printers&lt;/em&gt;. L’enregistrement se fait via un
-  objet &lt;code&gt;RegexpCollectionPrettyPrinter&lt;/code&gt; (via lequel on peut donner un
-  nom à notre groupe de &lt;em&gt;pretty-printers&lt;/em&gt;) dans lequel nous ajoutons
-  nos &lt;em&gt;pretty-printers&lt;/em&gt;. Lors de l’ajout, on donne un nom, une expression
-  rationnelle qui va définir les noms des types que nous pouvons afficher, puis
-  la classe du &lt;em&gt;pretty-printer&lt;/em&gt;.
-&lt;/p&gt;
-
-&lt;p&gt;Maintenant que le code est fait, voyons comment utiliser tout ça.&lt;/p&gt;
-
-&lt;h2&gt;La mise en œuvre&lt;/h2&gt;
-
-&lt;p&gt;
-  La mise en œuvre est très simple, elle peut se faire via le
-  fichier &lt;em&gt;.gdbinit&lt;/em&gt;. Il suffit d’y ajouter ces lignes :
-&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      
-      &lt;div class="highlight"&gt;
-        &lt;table class="rouge-table"&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td class="rouge-gutter gl"&gt;&lt;pre class="lineno"&gt;1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-&lt;/pre&gt;&lt;/td&gt;&lt;td class="rouge-code"&gt;&lt;pre&gt;# Python
-python
-
-from sys import path
-from gdb.printing import register_pretty_printer
-
-path.insert(0, '/chemin/vers/répertoire/contenant/my_pp')
-
-import my_pp
-register_pretty_printer(gdb.current_objfile(), my_pp.netinet_pp())
-&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;Je pense que ça se passe de commentaire.&lt;/p&gt;
-
-&lt;h2&gt;Le résultat&lt;/h2&gt;
-
-&lt;p&gt;Et maintenant, si on lance GDB sur notre exemple on obtient :&lt;/p&gt;
-
-    &lt;figure class="code"&gt;
-      
-      &lt;div class="highlight"&gt;
-        &lt;pre&gt;% gdb -q ./example --command=command.gdb 2&amp;gt; /dev/null
-Reading symbols from ./example...done.
-Breakpoint 1 at 0x8065581: file example.c, line 17.
-[Thread debugging using libthread_db enabled]
-Using host libthread_db library "/usr/lib/libthread_db.so.1".
-$1 = 82.66.107.250
-$2 = 2a01:e35:2426:bfa0:215:ff:fe42:7fd3
-[Inferior 1 (process 2424) exited normally]
-&lt;/pre&gt;
-      &lt;/div&gt;
-    &lt;/figure&gt;
-
-
-&lt;p&gt;Ce qui est, il faut l’admettre, bien plus lisible.&lt;/p&gt;
-
-&lt;p&gt;
-  Pour conclure, je mentionnerai que la commande &lt;code&gt;info
-  pretty-printer&lt;/code&gt; permet d’afficher la liste des &lt;em&gt;pretty-printers&lt;/em&gt;
-  actuellement chargé dans GDB. Il est également possible d’utiliser l’affichage
-  « brut » de GDB, sans passer par un &lt;em&gt;pretty-printer&lt;/em&gt; (même s’il en
-  existe un pour le type) en utilisant le modificateur &lt;code&gt;/r&lt;/code&gt; de la
-  commande &lt;code&gt;print&lt;/code&gt; (par exemple &lt;code&gt;print /r toto&lt;/code&gt;).
-&lt;/p&gt;
-
-&lt;p&gt;
-  Voilà, ça sera tout pour cette introduction aux &lt;em&gt;pretty-printers&lt;/em&gt;. La
-  documentation officielle est
-  &lt;a href="https://sourceware.org/gdb/current/onlinedocs/gdb/Pretty-Printing.html"&gt;ici&lt;/a&gt;
-  pour ceux qui veulent approfondir.
-&lt;/p&gt;
-
-&lt;div class="footnotes"&gt;
-  &lt;hr class="weak-hr" /&gt;
-  &lt;ol&gt;
-    &lt;li id="fn:1"&gt;
-      &lt;p&gt;
-        je vous conseille d’utiliser au moins GDB 7.8, les versions antérieures
-        ayant un
-        &lt;a href="https://web.archive.org/web/20160418212343/http://comments.gmane.org/gmane.comp.gdb.patches/94851"&gt;bogue&lt;/a&gt;
-        avec les types définis via &lt;code&gt;typedef&lt;/code&gt;.&lt;a href="#fnref:1"&gt;↩&lt;/a&gt;
-      &lt;/p&gt;
-    &lt;/li&gt;
-    &lt;li id="fn:2"&gt;
-      &lt;p&gt;
-        depuis Python 3.3, on utilise plutôt le module
-        &lt;a href="https://docs.python.org/dev/library/ipaddress.html"&gt;ipaddress&lt;/a&gt;
-        &lt;a href="#fnref:2"&gt;↩&lt;/a&gt;
-      &lt;/p&gt;
-    &lt;/li&gt;
-  &lt;/ol&gt;
-&lt;/div&gt;
 </content>
   </entry>
 </feed>

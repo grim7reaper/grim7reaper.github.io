@@ -6,12 +6,12 @@
     <meta name="language"  content="fr" />
     <meta name="author"    content="Sylvain Laperche" />
     <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
-    <meta name="generator" content="Nanoc 4.12.2" />
+    <meta name="generator" content="Nanoc 4.12.14" />
 
     <title>Les pointeurs opaques — grim7reaper</title>
 
     <link rel="icon"       type="image/png" href="/favicon.png" />
-    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2011/09/17/les-pointeurs-opaques/" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.github.io/blog/2011/09/17/les-pointeurs-opaques/" />
     <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
 
     <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
@@ -20,7 +20,7 @@
   <body>
     <header id="blog-title">
       <h1><a href="/">grim7reaper</a></h1>
-      <p>A Code Craftsman</p>
+      <p>Un artisan du code</p>
     </header>
     <nav id="navbar">
       <ul>
@@ -35,7 +35,7 @@
           <input
             type="hidden"
             name="sites"
-            value="grim7reaper.rolinh.ch" />
+            value="grim7reaper.github.io" />
           <input
             class="search"
             type="text"
@@ -222,8 +222,8 @@
 11
 12
 13
-</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdio.h&gt;
-#include "lib.h"
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"lib.h"</span><span class="cp">
 </span>
 <span class="n">list</span> <span class="nf">list_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
 <span class="p">{</span>
@@ -253,7 +253,7 @@
 6
 7
 8
-</pre></td><td class="rouge-code"><pre><span class="cp">#include "lib.h"
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">"lib.h"</span><span class="cp">
 </span>
 <span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
 <span class="p">{</span>
@@ -354,8 +354,8 @@
 12
 13
 14
-</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdio.h&gt;
-#include "lib.h"
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"lib.h"</span><span class="cp">
 </span>
 <span class="n">list</span> <span class="nf">list_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
 <span class="p">{</span>
@@ -515,9 +515,9 @@
 34
 35
 36
-</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdlib.h&gt;
-#include &lt;stdio.h&gt;
-#include "lib.h"
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"lib.h"</span><span class="cp">
 </span>
 <span class="k">typedef</span> <span class="k">struct</span> <span class="n">node_</span>
 <span class="p">{</span>
@@ -574,8 +574,8 @@
 11
 12
 13
-</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stddef.h&gt; </span><span class="cm">/* For NULL. */</span><span class="cp">
-#include "lib.h"
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">&lt;stddef.h&gt;</span><span class="c1"> /* For NULL. */</span><span class="cp">
+#include</span> <span class="cpf">"lib.h"</span><span class="cp">
 </span>
 <span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
 <span class="p">{</span>
@@ -659,10 +659,10 @@
 40
 41
 42
-</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdlib.h&gt;
-#include &lt;stdio.h&gt;
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
 </span>
-<span class="cp">#include "lib.h"
+<span class="cp">#include</span> <span class="cpf">"lib.h"</span><span class="cp">
 </span>
 <span class="k">typedef</span> <span class="k">struct</span> <span class="n">node_</span>
 <span class="p">{</span>
@@ -906,7 +906,7 @@
 8
 9
 10
-</pre></td><td class="rouge-code"><pre><span class="cp">#include "str.h"
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">"str.h"</span><span class="cp">
 </span>
 <span class="k">struct</span> <span class="n">Str__</span>
 <span class="p">{</span>
@@ -996,7 +996,7 @@
 17
 18
 19
-</pre></td><td class="rouge-code"><pre><span class="cp">#include "example.h"
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">"example.h"</span><span class="cp">
 </span>
 <span class="cm">/* Private attributes. */</span>
 <span class="k">struct</span> <span class="n">private_example__</span>
@@ -1040,7 +1040,7 @@
 10
 11
 12
-</pre></td><td class="rouge-code"><pre><span class="cp">#include "example.h"
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">"example.h"</span><span class="cp">
 </span>
 <span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
 <span class="p">{</span>
@@ -1124,7 +1124,7 @@
 
     <footer>
       <small>
-        Copyright © 2010-2021 — Sylvain Laperche
+        Copyright © 2010-2023 — Sylvain Laperche
         <br />
         Le contenu de ce site est sous licence
         <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.

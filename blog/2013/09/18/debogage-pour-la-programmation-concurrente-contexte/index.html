@@ -6,12 +6,12 @@
     <meta name="language"  content="fr" />
     <meta name="author"    content="Sylvain Laperche" />
     <meta name="viewport"  content="width=device-width, initial-scale=1.0" />
-    <meta name="generator" content="Nanoc 4.12.2" />
+    <meta name="generator" content="Nanoc 4.12.14" />
 
     <title>Débogage pour la programmation concurrente — Contexte — grim7reaper</title>
 
     <link rel="icon"       type="image/png" href="/favicon.png" />
-    <link rel="canonical"  type="text/html" href="https://grim7reaper.rolinh.ch/blog/2013/09/18/debogage-pour-la-programmation-concurrente-contexte/" />
+    <link rel="canonical"  type="text/html" href="https://grim7reaper.github.io/blog/2013/09/18/debogage-pour-la-programmation-concurrente-contexte/" />
     <link rel="license"    type="text/html" href="https://creativecommons.org/licenses/by/4.0/">
 
     <link rel="stylesheet" type="text/css"  href="/stylesheet.css" />
@@ -20,7 +20,7 @@
   <body>
     <header id="blog-title">
       <h1><a href="/">grim7reaper</a></h1>
-      <p>A Code Craftsman</p>
+      <p>Un artisan du code</p>
     </header>
     <nav id="navbar">
       <ul>
@@ -35,7 +35,7 @@
           <input
             type="hidden"
             name="sites"
-            value="grim7reaper.rolinh.ch" />
+            value="grim7reaper.github.io" />
           <input
             class="search"
             type="text"
@@ -101,10 +101,10 @@
 26
 27
 28
-</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdlib.h&gt;
-#include &lt;stdio.h&gt;
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
 </span>
-<span class="cp">#include &lt;pthread.h&gt;
+<span class="cp">#include</span> <span class="cpf">&lt;pthread.h&gt;</span><span class="cp">
 </span>
 <span class="k">struct</span> <span class="n">T</span> <span class="p">{</span> <span class="kt">int</span> <span class="n">i</span><span class="p">;</span> <span class="p">};</span>
 
@@ -236,10 +236,10 @@
 42
 43
 44
-</pre></td><td class="rouge-code"><pre><span class="cp">#include &lt;stdlib.h&gt;
-#include &lt;stdio.h&gt;
+</pre></td><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
 </span>
-<span class="cp">#include &lt;pthread.h&gt;
+<span class="cp">#include</span> <span class="cpf">&lt;pthread.h&gt;</span><span class="cp">
 </span>
 <span class="k">struct</span> <span class="n">T</span> <span class="p">{</span> <span class="kt">int</span> <span class="n">i</span><span class="p">;</span> <span class="p">};</span>
 
@@ -419,7 +419,7 @@
 
     <footer>
       <small>
-        Copyright © 2010-2021 — Sylvain Laperche
+        Copyright © 2010-2023 — Sylvain Laperche
         <br />
         Le contenu de ce site est sous licence
         <a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC-BY</a>.
