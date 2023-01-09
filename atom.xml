@@ -138,7 +138,7 @@ critcmp h3 h3o -g '(.+/)(?:h3o?)(/?.*)'
       &lt;li&gt;84 where &lt;code&gt;h3o&lt;/code&gt; is up to 4x faster&lt;/li&gt;
       &lt;li&gt;43 where &lt;code&gt;h3o&lt;/code&gt; is up to 5x faster&lt;/li&gt;
       &lt;li&gt;46 where &lt;code&gt;h3o&lt;/code&gt; is up to 10x faster&lt;/li&gt;
-      &lt;li&gt;24 where &lt;code&gt;h3o&lt;/code&gt; is up to 10x faster&lt;/li&gt;
+      &lt;li&gt;24 where &lt;code&gt;h3o&lt;/code&gt; more than 10x faster&lt;/li&gt;
     &lt;/ul&gt;
   &lt;/ul&gt;
 &lt;/p&gt;
